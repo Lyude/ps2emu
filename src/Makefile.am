@@ -1,5 +1,5 @@
 AM_CFLAGS = -std=gnu11 $(GLIB_CFLAGS) -Wall
-AM_LDFLAGS = $(GLIB_LDFLAGS)
+AM_LDFLAGS = $(GLIB_LIBS) $(GLIB_LDFLAGS)
 
 sbin_PROGRAMS = ps2emu-record
 
