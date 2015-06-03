@@ -36,7 +36,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       gchar **output,
                                       gchar **start_pos,
                                       GError **error) {
-    g_autoptr(gchar) search_str = g_strdup_printf("%s: ", module_name);
+    g_autofree gchar *search_str = g_strdup_printf("%s: ", module_name);
     gchar *current_line;
     GIOStatus rc;
 
@@ -61,7 +61,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
 static gint get_keyboard_irq(GIOChannel *input_channel,
                              GError **error) {
     GIOStatus rc;
-    g_autoptr(gchar) current_line;
+    g_autofree gchar* current_line;
     gchar *start_pos;
     gint irq;
 

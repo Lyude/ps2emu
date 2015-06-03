@@ -20,7 +20,4 @@
 
 #define PS2EMU_ERROR (g_quark_from_static_string("ps2emu-input-error"))
 
-/* Generic autoptr cleanup definitions not included by default */
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(gchar, g_free);
-
 #endif /* !__PS2EMU_MISC_H__ */
