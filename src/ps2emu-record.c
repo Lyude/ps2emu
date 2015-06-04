@@ -270,7 +270,14 @@ int main(int argc, char *argv[]) {
         "controller on another person's machine.\n"
         "\n"
         "If [file] is not specified, ps2emu-record will read from the kernel\n"
-        "log (/dev/kmsg).");
+        "log (/dev/kmsg).\n"
+        "\n"
+        "By default, ps2emu-record does not record keyboard input. This is\n"
+        "is because recording the user's keyboard input has the consequence\n"
+        "of potentially recording sensitive information, such as a user's\n"
+        "password (since the user usually needs to type their password into\n"
+        "their keyboard to log in). If you need to record keyboard input,\n"
+        "please read the documentation for this tool first.\n");
 
     rc = g_option_context_parse(main_context, &argc, &argv, &error);
     if (!rc) {
