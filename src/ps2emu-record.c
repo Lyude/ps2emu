@@ -37,23 +37,24 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       gchar **start_pos,
                                       GError **error) {
     g_autofree gchar *search_str = g_strdup_printf("%s: ", module_name);
-    gchar *current_line;
+    g_autofree gchar *current_line;
     GIOStatus rc;
 
     while ((rc = g_io_channel_read_line(input_channel, &current_line, NULL,
                                         NULL, error)) == G_IO_STATUS_NORMAL) {
         *start_pos = strstr(current_line, search_str);
-        if (!*start_pos) {
-            g_free(current_line);
-            continue;
-        }
+        if (*start_pos)
+            break;
 
-        /* Move the start position after the initial 'i8042: ' */
-        *start_pos += strlen(search_str);
-        *output = current_line;
-
-        break;
+        g_clear_pointer(&current_line, g_free);
     }
+
+    if (rc != G_IO_STATUS_NORMAL)
+        return rc;
+
+    /* Move the start position after the initial 'i8042: ' */
+    *start_pos += strlen(search_str);
+    *output = g_steal_pointer(&current_line);
 
     return rc;
 }
