@@ -236,6 +236,24 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1)
         input_path = argv[1];
+    else {
+        g_autofree gchar *cmdline = NULL;
+
+        /* If we're reading from /dev/kmsg, we won't get anything useful if the
+         * i8042.debug=1 parameter isn't passed to the kernel on boot. To help a
+         * potentially confused user, warn them if i8042.debug=1 isn't on and
+         * they're trying to read from the kernel log */
+        if (g_file_get_contents("/proc/cmdline", &cmdline, NULL, &error)) {
+            if (!strstr(cmdline, "i8042.debug=1")) {
+                g_warning("You're trying to record PS/2 events from the kernel "
+                          "log, but you didn't boot with `i8042.debug=1` "
+                          "added to your kernel boot parameters. As a result, "
+                          "it is very unlikely this application will work "
+                          "properly. Please reboot your computer with this "
+                          "option enabled.");
+            }
+        }
+    }
 
     g_option_context_free(main_context);
 
