@@ -206,25 +206,9 @@ static gboolean record(GError **error) {
         return FALSE;
     }
 
-    printf("Keyboard IRQ: %d\n", keyboard_irq);
-
     while ((rc = get_next_event(input_channel, &event, error)) ==
-            G_IO_STATUS_NORMAL) {
-        if (*error)
-            return FALSE;
-
-        printf("Time: %ld\n"
-               "\tType: %s\n",
-               event.time, event_type_to_string(event.type));
-
-        if (event.has_data)
-            printf("\tData: %2hhx\n", event.data);
-        else
-            printf("\tData: <none>\n");
-
-        if (event.type == PS2_EVENT_TYPE_INTERRUPT)
-            printf("\tIRQ: %d\n", event.irq);
-    }
+           G_IO_STATUS_NORMAL)
+        printf("%s\n", event_to_string(&event));
 
     return TRUE;
 }

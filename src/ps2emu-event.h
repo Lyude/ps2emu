@@ -58,5 +58,7 @@ static inline gchar* event_type_to_string(PS2EventType type) {
     return type_str;
 }
 
+gchar * event_to_string(PS2Event *event)
+G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
 #endif /* !__PS2EMU_EVENT_H__ */

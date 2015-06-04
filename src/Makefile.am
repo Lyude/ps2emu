@@ -3,4 +3,5 @@ AM_LDFLAGS = $(GLIB_LIBS) $(GLIB_LDFLAGS)
 
 sbin_PROGRAMS = ps2emu-record
 
-ps2emu_record_SOURCES = ps2emu-record.c
+ps2emu_record_SOURCES = ps2emu-record.c \
+                        ps2emu-event.c
