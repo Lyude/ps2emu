@@ -86,34 +86,21 @@ static gint get_keyboard_irq(GIOChannel *input_channel,
     return 0;
 }
 
-static GIOStatus get_next_event(GIOChannel *input_channel,
-                                PS2Event *event,
-                                GError **error) {
-    gchar *start_pos;
-    g_autofree gchar *current_line = NULL;
+static gboolean parse_normal_event(const gchar *start_pos,
+                                   PS2Event *event,
+                                   GError **error) {
     g_autofree gchar *type_str = NULL;
     g_auto(GStrv) type_str_args = NULL;
     int type_str_argc,
         parsed_count;
-    GIOStatus rc;
 
-    while ((rc = get_next_module_line(input_channel, "i8042", &current_line,
-                                      &start_pos, error)) ==
-            G_IO_STATUS_NORMAL) {
-        errno = 0;
+    errno = 0;
+    parsed_count = sscanf(start_pos,
+                          "[%ld] %hhx %*1[-<]%*1[->] i8042 (%m[^)])\n",
+                          &event->time, &event->data, &type_str);
 
-        parsed_count = sscanf(start_pos,
-                              "[%ld] %hhx %*1[-<]%*1[->] i8042 (%m[^)])\n",
-                              &event->time, &event->data, &type_str);
-
-        if (errno == 0 && parsed_count == 3)
-            break;
-
-        g_clear_pointer(&current_line, g_free);
-    }
-
-    if (rc != G_IO_STATUS_NORMAL)
-        return rc;
+    if (errno != 0 || parsed_count != 3)
+        return FALSE;
 
     type_str_args = g_strsplit(type_str, ",", 0);
 
@@ -125,7 +112,7 @@ static GIOStatus get_next_event(GIOChannel *input_channel,
             g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
                         "Got interrupt event, but had less arguments then "
                         "expected");
-            return rc;
+            return FALSE;
         }
 
         errno = 0;
@@ -134,7 +121,7 @@ static GIOStatus get_next_event(GIOChannel *input_channel,
             g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
                         "Failed to parse IRQ from interrupt event: %s\n",
                         strerror(errno));
-            return rc;
+            return FALSE;
         }
     }
     else if (strcmp(type_str, "command") == 0)
@@ -146,34 +133,58 @@ static GIOStatus get_next_event(GIOChannel *input_channel,
     else if (strcmp(type_str, "kbd-data") == 0)
         event->type = PS2_EVENT_TYPE_KBD_DATA;
 
+    event->has_data = TRUE;
+
+    return TRUE;
+}
+
+static gboolean parse_interrupt_without_data(const gchar *start_pos,
+                                             PS2Event *event,
+                                             GError **error) {
+    int parsed_count;
+
+    errno = 0;
+    parsed_count = sscanf(start_pos,
+                          "[%ld] Interrupt %hd, without any data\n",
+                          &event->time, &event->irq);
+
+    if (errno != 0 || parsed_count != 2)
+        return FALSE;
+
+    event->has_data = FALSE;
+
+    return TRUE;
+}
+
+static GIOStatus get_next_event(GIOChannel *input_channel,
+                                PS2Event *event,
+                                GError **error) {
+    gchar *start_pos;
+    g_autofree gchar *current_line = NULL;
+    GIOStatus rc;
+
+    while ((rc = get_next_module_line(input_channel, "i8042", &current_line,
+                                      &start_pos, error)) ==
+            G_IO_STATUS_NORMAL) {
+        if (parse_normal_event(start_pos, event, error))
+            break;
+
+        if (*error)
+            return rc;
+
+        if (parse_interrupt_without_data(start_pos, event, error))
+            break;
+
+        if (*error)
+            return rc;
+
+        g_clear_pointer(&current_line, g_free);
+    }
+
     if (rc != G_IO_STATUS_NORMAL)
         return rc;
 
     return rc;
-}
-
-static gchar* event_type_to_string(PS2EventType type) {
-    gchar *type_str;
-
-    switch (type) {
-        case PS2_EVENT_TYPE_COMMAND:
-            type_str = "Command";
-            break;
-        case PS2_EVENT_TYPE_PARAMETER:
-            type_str = "Parameter";
-            break;
-        case PS2_EVENT_TYPE_RETURN:
-            type_str = "Return";
-            break;
-        case PS2_EVENT_TYPE_KBD_DATA:
-            type_str = "Kbd-data";
-            break;
-        case PS2_EVENT_TYPE_INTERRUPT:
-            type_str = "Interrupt";
-            break;
-    }
-
-    return type_str;
 }
 
 static gboolean record(GError **error) {
@@ -202,9 +213,14 @@ static gboolean record(GError **error) {
             return FALSE;
 
         printf("Time: %ld\n"
-               "\tType: %s\n"
-               "\tData: %hhx\n",
-               event.time, event_type_to_string(event.type), event.data);
+               "\tType: %s\n",
+               event.time, event_type_to_string(event.type));
+
+        if (event.has_data)
+            printf("\tData: %2hhx\n", event.data);
+        else
+            printf("\tData: <none>\n");
+
         if (event.type == PS2_EVENT_TYPE_INTERRUPT)
             printf("\tIRQ: %d\n", event.irq);
     }
