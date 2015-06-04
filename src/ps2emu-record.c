@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
     GError *error = NULL;
 
     g_option_context_set_help_enabled(main_context, TRUE);
-    g_option_context_set_summary(main_context,
+    g_option_context_set_description(main_context,
         "Allows the recording of all of the commands going in/out of a PS/2\n"
         "port, so that they may later be replayed using a virtual PS/2\n"
         "controller on another person's machine.\n"
