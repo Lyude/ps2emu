@@ -281,8 +281,8 @@ int main(int argc, char *argv[]) {
 
     rc = g_option_context_parse(main_context, &argc, &argv, &error);
     if (!rc) {
-        fprintf(stderr, "Invalid options: %s\n", error->message);
-        exit(1);
+        exit_on_bad_argument(main_context, TRUE,
+            "Invalid options: %s", error->message);
     }
 
     /* Don't record the keyboard if the user didn't explicitly enable it */
