@@ -19,11 +19,14 @@
 #include <errno.h>
 #include <error.h>
 #include <glib.h>
+#include <glib-object.h>
 
 #include "misc.h"
+#include "ps2emu-event.h"
 
 typedef enum {
-    PS2_INPUT_UNEXPECTED_EOF
+    PS2_INPUT_UNEXPECTED_EOF,
+    PS2_INPUT_ERROR
 } PS2Error;
 
 static char *input_path = "/dev/kmsg";
@@ -83,9 +86,101 @@ static gint get_keyboard_irq(GIOChannel *input_channel,
     return 0;
 }
 
+static GIOStatus get_next_event(GIOChannel *input_channel,
+                                PS2Event *event,
+                                GError **error) {
+    gchar *start_pos;
+    g_autofree gchar *current_line = NULL;
+    g_autofree gchar *type_str = NULL;
+    g_auto(GStrv) type_str_args = NULL;
+    int type_str_argc,
+        parsed_count;
+    GIOStatus rc;
+
+    while ((rc = get_next_module_line(input_channel, "i8042", &current_line,
+                                      &start_pos, error)) ==
+            G_IO_STATUS_NORMAL) {
+        errno = 0;
+
+        parsed_count = sscanf(start_pos,
+                              "[%ld] %hhx %*1[-<]%*1[->] i8042 (%m[^)])\n",
+                              &event->time, &event->data, &type_str);
+
+        if (errno == 0 && parsed_count == 3)
+            break;
+
+        g_clear_pointer(&current_line, g_free);
+    }
+
+    if (rc != G_IO_STATUS_NORMAL)
+        return rc;
+
+    type_str_args = g_strsplit(type_str, ",", 0);
+
+    if (strcmp(type_str_args[0], "interrupt") == 0) {
+        event->type = PS2_EVENT_TYPE_INTERRUPT;
+
+        type_str_argc = g_strv_length(type_str_args);
+        if (type_str_argc < 3) {
+            g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
+                        "Got interrupt event, but had less arguments then "
+                        "expected");
+            return rc;
+        }
+
+        errno = 0;
+        event->irq = strtol(type_str_args[2], NULL, 10);
+        if (errno != 0) {
+            g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
+                        "Failed to parse IRQ from interrupt event: %s\n",
+                        strerror(errno));
+            return rc;
+        }
+    }
+    else if (strcmp(type_str, "command") == 0)
+        event->type = PS2_EVENT_TYPE_COMMAND;
+    else if (strcmp(type_str, "parameter") == 0)
+        event->type = PS2_EVENT_TYPE_PARAMETER;
+    else if (strcmp(type_str, "return") == 0)
+        event->type = PS2_EVENT_TYPE_RETURN;
+    else if (strcmp(type_str, "kbd-data") == 0)
+        event->type = PS2_EVENT_TYPE_KBD_DATA;
+
+    if (rc != G_IO_STATUS_NORMAL)
+        return rc;
+
+    return rc;
+}
+
+static gchar* event_type_to_string(PS2EventType type) {
+    gchar *type_str;
+
+    switch (type) {
+        case PS2_EVENT_TYPE_COMMAND:
+            type_str = "Command";
+            break;
+        case PS2_EVENT_TYPE_PARAMETER:
+            type_str = "Parameter";
+            break;
+        case PS2_EVENT_TYPE_RETURN:
+            type_str = "Return";
+            break;
+        case PS2_EVENT_TYPE_KBD_DATA:
+            type_str = "Kbd-data";
+            break;
+        case PS2_EVENT_TYPE_INTERRUPT:
+            type_str = "Interrupt";
+            break;
+    }
+
+    return type_str;
+}
+
 static gboolean record(GError **error) {
     GIOChannel *input_channel = g_io_channel_new_file(input_path, "r", error);
     gint keyboard_irq;
+    PS2Event event;
+    GIOStatus rc;
 
     if (!input_channel)
         return FALSE;
@@ -100,6 +195,19 @@ static gboolean record(GError **error) {
     }
 
     printf("Keyboard IRQ: %d\n", keyboard_irq);
+
+    while ((rc = get_next_event(input_channel, &event, error)) ==
+            G_IO_STATUS_NORMAL) {
+        if (*error)
+            return FALSE;
+
+        printf("Time: %ld\n"
+               "\tType: %s\n"
+               "\tData: %hhx\n",
+               event.time, event_type_to_string(event.type), event.data);
+        if (event.type == PS2_EVENT_TYPE_INTERRUPT)
+            printf("\tIRQ: %d\n", event.irq);
+    }
 
     return TRUE;
 }
