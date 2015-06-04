@@ -16,8 +16,36 @@
 #ifndef __PS2EMU_MISC_H__
 #define __PS2EMU_MISC_H__
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <glib.h>
 
 #define PS2EMU_ERROR (g_quark_from_static_string("ps2emu-input-error"))
+
+static inline void exit_on_bad_argument(GOptionContext *option_context,
+                                        gboolean print_help,
+                                        const gchar *format,
+                                        ...)
+G_GNUC_NORETURN;
+
+static inline void exit_on_bad_argument(GOptionContext *option_context,
+                                        gboolean print_help,
+                                        const gchar *format,
+                                        ...) {
+    va_list args;
+
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
+    fprintf(stderr, "\n");
+
+    if (print_help) {
+        fprintf(stderr, "%s",
+                g_option_context_get_help(option_context, FALSE, NULL));
+    }
+
+    exit(1);
+}
 
 #endif /* !__PS2EMU_MISC_H__ */

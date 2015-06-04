@@ -31,6 +31,9 @@ typedef enum {
 
 static char *input_path = "/dev/kmsg";
 
+static gboolean record_kbd;
+static gboolean record_aux;
+
 /* Skips to the next line printed by a module. We do this by just searching for
  * the module name, followed by a ": "
  */
@@ -207,8 +210,33 @@ static gboolean record(GError **error) {
     }
 
     while ((rc = get_next_event(input_channel, &event, error)) ==
-           G_IO_STATUS_NORMAL)
+           G_IO_STATUS_NORMAL) {
+        /* The logic here is that we can only get two types of events from a
+         * keyboard, kbd-data and interrupt. No other device sends kbd-data, so
+         * we can judge if an event comes from a keyboard or not solely based
+         * off that. With interrupts, we can tell if the interrupt is coming
+         * from the keyboard or not by comparing the IRQ of the event to that of
+         * the keyboard */
+        if (!record_kbd) {
+            if (event.type == PS2_EVENT_TYPE_INTERRUPT &&
+                event.irq == keyboard_irq)
+                continue;
+
+            if (event.type == PS2_EVENT_TYPE_KBD_DATA)
+                continue;
+        }
+
+        if (!record_aux) {
+            if (event.type == PS2_EVENT_TYPE_INTERRUPT) {
+                if (event.irq != keyboard_irq)
+                    continue;
+            }
+            else if (event.type != PS2_EVENT_TYPE_KBD_DATA)
+                continue;
+        }
+
         printf("%s\n", event_to_string(&event));
+    }
 
     return TRUE;
 }
@@ -218,7 +246,23 @@ int main(int argc, char *argv[]) {
         g_option_context_new("[file] - record PS/2 devices");
     gboolean rc;
     GError *error = NULL;
+    gchar *record_kbd_str = NULL,
+          *record_aux_str = NULL;
 
+    GOptionEntry options[] = {
+        { "record-kbd", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING,
+          &record_kbd_str,
+          "Enable recording of the KBD (keyboard) port, disabled by default",
+          "<yes|no>" },
+        { "record-aux", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING,
+          &record_aux_str,
+          "Enable recording of the AUX (auxillary, usually the port used for "
+          "cursor devices) port, enabled by default",
+          "<yes|no>" },
+        { 0 }
+    };
+
+    g_option_context_add_main_entries(main_context, options, NULL);
     g_option_context_set_help_enabled(main_context, TRUE);
     g_option_context_set_description(main_context,
         "Allows the recording of all of the commands going in/out of a PS/2\n"
@@ -233,6 +277,30 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Invalid options: %s\n", error->message);
         exit(1);
     }
+
+    /* Don't record the keyboard if the user didn't explicitly enable it */
+    if (!record_kbd_str || strcasecmp(record_kbd_str, "no") == 0)
+        record_kbd = FALSE;
+    else if (strcasecmp(record_kbd_str, "yes") == 0)
+        record_kbd = TRUE;
+    else {
+        exit_on_bad_argument(main_context, TRUE,
+            "Invalid value for --record-kbd: `%s`", record_kbd_str);
+    }
+
+    /* Record the AUX port unless the user explicitly disables it */
+    if (!record_aux_str || strcasecmp(record_aux_str, "yes") == 0)
+        record_aux = TRUE;
+    else if (strcasecmp(record_aux_str, "no") == 0)
+        record_aux = FALSE;
+    else {
+        exit_on_bad_argument(main_context, TRUE,
+            "Invalid value for --record-aux: `%s`", record_aux_str);
+    }
+
+    /* Throw an error if recording of both KBD and AUX is disabled */
+    if (!record_kbd && !record_aux)
+        exit_on_bad_argument(main_context, FALSE, "Nothing to record!");
 
     if (argc > 1)
         input_path = argv[1];
