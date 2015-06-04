@@ -151,6 +151,7 @@ static gboolean parse_interrupt_without_data(const gchar *start_pos,
     if (errno != 0 || parsed_count != 2)
         return FALSE;
 
+    event->type = PS2_EVENT_TYPE_INTERRUPT;
     event->has_data = FALSE;
 
     return TRUE;
