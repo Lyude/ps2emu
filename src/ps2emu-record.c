@@ -25,8 +25,8 @@
 #include "ps2emu-event.h"
 
 typedef enum {
-    PS2_INPUT_UNEXPECTED_EOF,
-    PS2_INPUT_ERROR
+    PS2_ERROR_INPUT_UNEXPECTED_EOF,
+    PS2_ERROR_INPUT
 } PS2Error;
 
 static char *input_path = "/dev/kmsg";
@@ -112,7 +112,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
 
         type_str_argc = g_strv_length(type_str_args);
         if (type_str_argc < 3) {
-            g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
+            g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
                         "Got interrupt event, but had less arguments then "
                         "expected");
             return FALSE;
@@ -121,7 +121,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
         errno = 0;
         event->irq = strtol(type_str_args[2], NULL, 10);
         if (errno != 0) {
-            g_set_error(error, PS2EMU_ERROR, PS2_INPUT_ERROR,
+            g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
                         "Failed to parse IRQ from interrupt event: %s\n",
                         strerror(errno));
             return FALSE;
@@ -202,7 +202,7 @@ static gboolean record(GError **error) {
 
     keyboard_irq = get_keyboard_irq(input_channel, error);
     if (!keyboard_irq) {
-        g_set_error(error, PS2EMU_ERROR, PS2_INPUT_UNEXPECTED_EOF,
+        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT_UNEXPECTED_EOF,
                     "Reached unexpected EOF while trying to determine keyboard "
                     "IRQ");
 
