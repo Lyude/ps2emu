@@ -397,6 +397,21 @@ int main(int argc, char *argv[]) {
     if (!rc) {
         fprintf(stderr, "Error: %s\n",
                 error->message);
+
+        if (g_error_matches(error, PS2EMU_ERROR,
+                            PS2_ERROR_NO_KBD_DEFINITION_FOUND)) {
+            fprintf(stderr,
+                "Usually, this error is caused by having the system run for\n"
+                "too long before rebooting. Normally this isn't an issue,\n"
+                "however the kernel's buffer is limited, and messages can be\n"
+                "lost after a certain amount of messages are posted to it.\n"
+                "This results in the beginning of the PS/2 data to be thrown\n"
+                "out, and that data is needed for this tool to work properly.\n"
+                "\n"
+                "Usually, rebooting your computer with `i8042.debug=1` and\n"
+                "trying to use this tool again will fix the problem.\n");
+        }
+
         return 1;
     }
 }
