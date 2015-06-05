@@ -20,7 +20,7 @@
 #include <glib.h>
 #include <glib-object.h>
 
-gchar * event_to_string(PS2Event *event) {
+gchar * ps2_event_to_string(PS2Event *event) {
     gchar *event_str;
     gchar *data_str;
 
@@ -34,13 +34,13 @@ gchar * event_to_string(PS2Event *event) {
     if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
         event_str = g_strdup_printf("%-10ld %-9s %5s %2hd",
                                     event->time,
-                                    event_type_to_string(event->type), data_str,
-                                    event->irq);
+                                    ps2_event_type_to_string(event->type),
+                                    data_str, event->irq);
     }
     else {
         event_str = g_strdup_printf("%-10ld %-9s %5s",
                                     event->time,
-                                    event_type_to_string(event->type),
+                                    ps2_event_type_to_string(event->type),
                                     data_str);
     }
 

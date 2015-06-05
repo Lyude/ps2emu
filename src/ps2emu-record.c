@@ -264,7 +264,7 @@ static gboolean process_event(PS2Event *event,
             return TRUE;
     }
 
-    printf("%s\n", event_to_string(event));
+    printf("%s\n", ps2_event_to_string(event));
 
     return TRUE;
 }

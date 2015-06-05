@@ -34,7 +34,7 @@ typedef struct {
     gushort      irq;
 } PS2Event;
 
-static inline gchar* event_type_to_string(PS2EventType type) {
+static inline gchar* ps2_event_type_to_string(PS2EventType type) {
     gchar *type_str;
 
     switch (type) {
@@ -58,7 +58,7 @@ static inline gchar* event_type_to_string(PS2EventType type) {
     return type_str;
 }
 
-gchar * event_to_string(PS2Event *event)
+gchar * ps2_event_to_string(PS2Event *event)
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
 #endif /* !__PS2EMU_EVENT_H__ */
