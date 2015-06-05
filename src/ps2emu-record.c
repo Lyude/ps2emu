@@ -230,6 +230,8 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
 
 static gboolean process_event(PS2Event *event,
                               GError **error) {
+    g_autofree gchar *event_str = NULL;
+
     /* The port information for the KBD port always comes before the actual
      * interrupts start, if we're starting to get interrupts and we haven't
      * actually figured out what the IRQ for the KBD port is, that means it's no
@@ -264,7 +266,8 @@ static gboolean process_event(PS2Event *event,
             return TRUE;
     }
 
-    printf("%s\n", ps2_event_to_string(event));
+    event_str = ps2_event_to_string(event);
+    printf("%s\n", event_str);
 
     return TRUE;
 }
