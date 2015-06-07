@@ -31,10 +31,7 @@ typedef enum {
 } PS2Error;
 
 typedef struct {
-    enum {
-        LOG_MSG_TYPE_EVENT,
-        LOG_MSG_TYPE_PORT
-    } type;
+    GQuark type;
 
     union {
         PS2Event event;
@@ -200,13 +197,12 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
     __label__ fail;
     gchar *start_pos;
     gchar *current_line = NULL;
-    GQuark match_type;
     GIOStatus rc;
 
-    while ((rc = get_next_module_line(input_channel, &match_type, &current_line,
+    while ((rc = get_next_module_line(input_channel, &res->type, &current_line,
                                       &start_pos, error)) ==
             G_IO_STATUS_NORMAL) {
-        if (match_type == I8042_OUTPUT) {
+        if (res->type == I8042_OUTPUT) {
             if (parse_normal_event(start_pos, &res->event, error))
                 break;
 
@@ -219,7 +215,7 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
             if (*error)
                 goto fail;
         }
-        else if (match_type == SERIO_OUTPUT) {
+        else if (res->type == SERIO_OUTPUT) {
             if (parse_port_definition(start_pos, &res->port, error))
                 break;
 
@@ -233,10 +229,7 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
     if (rc != G_IO_STATUS_NORMAL)
         return rc;
 
-    if (match_type == I8042_OUTPUT)
-        res->type = LOG_MSG_TYPE_EVENT;
-    else
-        res->type = LOG_MSG_TYPE_PORT;
+    res->type = res->type;
 
 fail:
     g_free(current_line);
@@ -311,11 +304,11 @@ static gboolean record(GError **error) {
 
     while ((rc = parse_next_message(input_channel, &res, error)) ==
            G_IO_STATUS_NORMAL) {
-        if (res.type == LOG_MSG_TYPE_EVENT) {
+        if (res.type == I8042_OUTPUT) {
             if (!process_event(&res.event, error))
                 return FALSE;
         }
-        else /* res.type == LOG_MSG_TYPE_PORT */ {
+        else /* res.type == SERIO_OUTPUT */ {
             process_new_port(&res.port);
             g_free(res.port.name);
         }
