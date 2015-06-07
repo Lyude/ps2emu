@@ -49,6 +49,11 @@ static gshort kbd_irq = -1;
 #define I8042_OUTPUT (g_quark_from_static_string("i8042: "))
 #define SERIO_OUTPUT (g_quark_from_static_string("serio: "))
 
+static void log_msg_result_clear(LogMsgParseResult *res) {
+    if (res->type == SERIO_OUTPUT)
+        g_free(res->port.name);
+}
+
 static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       GQuark *match,
                                       gchar **output,
@@ -295,6 +300,7 @@ static void process_new_port(PS2Port *port) {
 }
 
 static gboolean record(GError **error) {
+    __label__ log_msg_error;
     GIOChannel *input_channel = g_io_channel_new_file(input_path, "r", error);
     LogMsgParseResult res;
     GIOStatus rc;
@@ -306,15 +312,20 @@ static gboolean record(GError **error) {
            G_IO_STATUS_NORMAL) {
         if (res.type == I8042_OUTPUT) {
             if (!process_event(&res.event, error))
-                return FALSE;
+                goto log_msg_error;
         }
-        else /* res.type == SERIO_OUTPUT */ {
+        else /* res.type == SERIO_OUTPUT */
             process_new_port(&res.port);
-            g_free(res.port.name);
-        }
+
+        log_msg_result_clear(&res);
     }
 
     return TRUE;
+
+log_msg_error:
+    log_msg_result_clear(&res);
+
+    return FALSE;
 }
 
 int main(int argc, char *argv[]) {
