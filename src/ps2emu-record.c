@@ -59,7 +59,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       GError **error) {
     static const gchar *search_strings[] = { "i8042: ", "serio: " };
     int index;
-    g_autofree gchar *current_line;
+    gchar *current_line;
     GIOStatus rc;
 
     while ((rc = g_io_channel_read_line(input_channel, &current_line, NULL,
@@ -72,7 +72,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
         if (*start_pos)
             break;
 
-        g_clear_pointer(&current_line, g_free);
+        g_free(current_line);
     }
 
     if (rc != G_IO_STATUS_NORMAL) {
@@ -81,7 +81,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
 
     /* Move the start position after the initial 'i8042: ' */
     *start_pos += strlen(search_strings[index]);
-    *output = g_steal_pointer(&current_line);
+    *output = current_line;
 
     *match = g_quark_from_static_string(search_strings[index]);
 
@@ -91,8 +91,9 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
 static gboolean parse_normal_event(const gchar *start_pos,
                                    PS2Event *event,
                                    GError **error) {
-    g_autofree gchar *type_str = NULL;
-    g_auto(GStrv) type_str_args = NULL;
+    __label__ error;
+    gchar *type_str = NULL;
+    gchar **type_str_args = NULL;
     int type_str_argc,
         parsed_count;
 
@@ -114,7 +115,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
             g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
                         "Got interrupt event, but had less arguments then "
                         "expected");
-            return FALSE;
+            goto error;
         }
 
         errno = 0;
@@ -123,7 +124,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
             g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
                         "Failed to parse IRQ from interrupt event: %s\n",
                         strerror(errno));
-            return FALSE;
+            goto error;
         }
     }
     else if (strcmp(type_str, "command") == 0)
@@ -137,7 +138,16 @@ static gboolean parse_normal_event(const gchar *start_pos,
 
     event->has_data = TRUE;
 
+    g_free(type_str);
+    g_strfreev(type_str_args);
+
     return TRUE;
+
+error:
+    g_free(type_str);
+    g_strfreev(type_str_args);
+
+    return FALSE;
 }
 
 static gboolean parse_interrupt_without_data(const gchar *start_pos,
@@ -162,7 +172,7 @@ static gboolean parse_interrupt_without_data(const gchar *start_pos,
 static gboolean parse_port_definition(const gchar *start_pos,
                                       PS2Port *port,
                                       GError **error) {
-    g_autofree gchar *name = NULL;
+    gchar *name = NULL;
     gint parsed_count;
     gushort irq;
 
@@ -171,12 +181,14 @@ static gboolean parse_port_definition(const gchar *start_pos,
                           "i8042 %ms port at %*x,%*x irq %hd\n",
                           &name, &irq);
 
-    if (errno != 0 || parsed_count != 2)
+    if (errno != 0 || parsed_count != 2) {
+        g_free(name);
         return FALSE;
+    }
 
     *port = (PS2Port) {
         .irq = irq,
-        .name = g_steal_pointer(&name)
+        .name = name
     };
 
     return TRUE;
@@ -185,8 +197,9 @@ static gboolean parse_port_definition(const gchar *start_pos,
 static GIOStatus parse_next_message(GIOChannel *input_channel,
                                     LogMsgParseResult *res,
                                     GError **error) {
+    __label__ fail;
     gchar *start_pos;
-    g_autofree gchar *current_line = NULL;
+    gchar *current_line = NULL;
     GQuark match_type;
     GIOStatus rc;
 
@@ -204,17 +217,17 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
                 break;
 
             if (*error)
-                return rc;
+                goto fail;
         }
         else if (match_type == SERIO_OUTPUT) {
             if (parse_port_definition(start_pos, &res->port, error))
                 break;
 
             if (*error)
-                return rc;
+                goto fail;
         }
 
-        g_clear_pointer(&current_line, g_free);
+        g_free(current_line);
     }
 
     if (rc != G_IO_STATUS_NORMAL)
@@ -225,12 +238,15 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
     else
         res->type = LOG_MSG_TYPE_PORT;
 
+fail:
+    g_free(current_line);
+
     return rc;
 }
 
 static gboolean process_event(PS2Event *event,
                               GError **error) {
-    g_autofree gchar *event_str = NULL;
+    gchar *event_str = NULL;
 
     /* The port information for the KBD port always comes before the actual
      * interrupts start, if we're starting to get interrupts and we haven't
@@ -269,16 +285,20 @@ static gboolean process_event(PS2Event *event,
     event_str = ps2_event_to_string(event);
     printf("%s\n", event_str);
 
+    g_free(event_str);
+
     return TRUE;
 }
 
 static void process_new_port(PS2Port *port) {
-    g_autofree gchar *port_str = ps2_port_to_string(port);
+    gchar *port_str = ps2_port_to_string(port);
 
     if (strcmp(port->name, "KBD") == 0)
         kbd_irq = port->irq;
 
     printf("%s\n", port_str);
+
+    g_free(port_str);
 }
 
 static gboolean record(GError **error) {
@@ -295,8 +315,10 @@ static gboolean record(GError **error) {
             if (!process_event(&res.event, error))
                 return FALSE;
         }
-        else /* res.type == LOG_MSG_TYPE_PORT */
+        else /* res.type == LOG_MSG_TYPE_PORT */ {
             process_new_port(&res.port);
+            g_free(res.port.name);
+        }
     }
 
     return TRUE;
@@ -373,7 +395,7 @@ int main(int argc, char *argv[]) {
     if (argc > 1)
         input_path = argv[1];
     else {
-        g_autofree gchar *cmdline = NULL;
+        gchar *cmdline = NULL;
 
         /* If we're reading from /dev/kmsg, we won't get anything useful if the
          * i8042.debug=1 parameter isn't passed to the kernel on boot. To help a
@@ -388,7 +410,10 @@ int main(int argc, char *argv[]) {
                           "properly. Please reboot your computer with this "
                           "option enabled.");
             }
+
         }
+
+        g_free(cmdline);
     }
 
     g_option_context_free(main_context);
