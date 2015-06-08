@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <error.h>
 #include <glib.h>
+#include <signal.h>
 
 #include "misc.h"
 #include "ps2emu-event.h"
@@ -35,6 +36,7 @@ typedef struct {
     union {
         PS2Event event;
         PS2Port port;
+        gint64 start_time;
     };
 } LogMsgParseResult;
 
@@ -45,8 +47,11 @@ static gboolean record_aux;
 
 static gshort kbd_irq = -1;
 
-#define I8042_OUTPUT (g_quark_from_static_string("i8042: "))
-#define SERIO_OUTPUT (g_quark_from_static_string("serio: "))
+static gint64 start_time = 0;
+
+#define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
+#define SERIO_OUTPUT  (g_quark_from_static_string("serio: "))
+#define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
 
 static void log_msg_result_clear(LogMsgParseResult *res) {
     if (res->type == SERIO_OUTPUT)
@@ -58,7 +63,7 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       gchar **output,
                                       gchar **start_pos,
                                       GError **error) {
-    static const gchar *search_strings[] = { "i8042: ", "serio: " };
+    static const gchar *search_strings[] = { "i8042: ", "serio: ", "ps2emu: " };
     int index;
     gchar *current_line;
     GIOStatus rc;
@@ -195,6 +200,21 @@ static gboolean parse_port_definition(const gchar *start_pos,
     return TRUE;
 }
 
+static gboolean parse_record_start_marker(const gchar *start_pos,
+                                          gint64 *start_time) {
+    gint parsed_count;
+
+    errno = 0;
+    parsed_count = sscanf(start_pos,
+                          "Start recording %ld\n",
+                          start_time);
+
+    if (errno != 0 || parsed_count != 1)
+        return FALSE;
+
+    return TRUE;
+}
+
 static GIOStatus parse_next_message(GIOChannel *input_channel,
                                     LogMsgParseResult *res,
                                     GError **error) {
@@ -226,6 +246,10 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
             if (*error)
                 goto fail;
         }
+        else if (res->type == PS2EMU_OUTPUT) {
+            if (parse_record_start_marker(start_pos, &res->start_time))
+                break;
+        }
 
         g_free(current_line);
     }
@@ -249,7 +273,8 @@ static gboolean process_event(PS2Event *event,
      * interrupts start, if we're starting to get interrupts and we haven't
      * actually figured out what the IRQ for the KBD port is, that means it's no
      * longer in the buffer, so we can't reliably record anything */
-     if (kbd_irq == -1 && event->type == PS2_EVENT_TYPE_INTERRUPT) {
+     if (kbd_irq == -1 && event->type == PS2_EVENT_TYPE_INTERRUPT &&
+         !start_time) {
         g_set_error_literal(error, PS2EMU_ERROR,
                             PS2_ERROR_NO_KBD_DEFINITION_FOUND,
                             "Interrupts received before KBD port definition");
@@ -298,6 +323,136 @@ static void process_new_port(PS2Port *port) {
     g_free(port_str);
 }
 
+static gboolean write_to_char_dev(const gchar *cdev,
+                                  GError **error,
+                                  const gchar *format,
+                                  ...) {
+    __label__ error;
+    GIOChannel *channel = g_io_channel_new_file(cdev, "w", error);
+    GIOStatus rc;
+    gchar *data = NULL;
+    gsize data_len,
+          bytes_written;
+    va_list args;
+
+    if (!channel) {
+        g_prefix_error(error, "While opening %s: ", cdev);
+
+        goto error;
+    }
+
+    va_start(args, format);
+    data = g_strdup_vprintf(format, args);
+    va_end(args);
+
+    data_len = strlen(data);
+
+    rc = g_io_channel_write_chars(channel, data, data_len, &bytes_written,
+                                  error);
+    if (rc != G_IO_STATUS_NORMAL) {
+        g_prefix_error(error, "While writing to %s: ", cdev);
+
+        goto error;
+    }
+
+    g_io_channel_unref(channel);
+    g_free(data);
+    return TRUE;
+
+error:
+    if (channel)
+        g_io_channel_unref(channel);
+
+    g_free(data);
+
+    return FALSE;
+}
+
+static gboolean enable_i8042_debugging(GError **error) {
+    __label__ error;
+    GDir *devices_dir = NULL;
+
+    devices_dir = g_dir_open("/sys/devices/platform/i8042", 0, error);
+    if (!devices_dir) {
+        g_prefix_error(error, "While opening /sys/devices/platform/i8042: ");
+
+        goto error;
+    }
+
+    /* Detach the devices before we do anything, this prevents potential race
+     * conditions */
+    for (gchar const *dir_name = g_dir_read_name(devices_dir);
+         dir_name != NULL && *error == NULL;
+         dir_name = g_dir_read_name(devices_dir)) {
+        gchar *file_name;
+
+        if (!g_str_has_prefix(dir_name, "serio"))
+            continue;
+
+        file_name = g_strconcat("/sys/devices/platform/i8042/", dir_name, "/",
+                                "drvctl", NULL);
+        if (!write_to_char_dev(file_name, error, "none")) {
+            g_free(file_name);
+            goto error;
+        }
+
+        g_free(file_name);
+    }
+    if (*error)
+        goto error;
+
+    /* We mark when the recording starts, so that we can separate this recording
+     * from other recordings ran during this session */
+    start_time = g_get_monotonic_time();
+
+    if (!write_to_char_dev("/dev/kmsg", error, "ps2emu: Start recording %ld\n",
+                           start_time))
+        goto error;
+
+    /* Enable the debugging output for i8042 */
+    if (!write_to_char_dev("/sys/module/i8042/parameters/debug", error, "1\n"))
+        goto error;
+
+    /* Reattach the devices */
+    g_dir_rewind(devices_dir);
+    for (gchar const *dir_name = g_dir_read_name(devices_dir);
+         dir_name != NULL && *error == NULL;
+         dir_name = g_dir_read_name(devices_dir)) {
+        gchar *file_name;
+
+        if (!g_str_has_prefix(dir_name, "serio"))
+            continue;
+
+        file_name = g_strconcat("/sys/devices/platform/i8042/", dir_name, "/",
+                                "drvctl", NULL);
+        if (!write_to_char_dev(file_name, error, "rescan")) {
+            g_free(file_name);
+            goto error;
+        }
+
+        g_free(file_name);
+    }
+    if (*error)
+        goto error;
+
+    g_dir_close(devices_dir);
+
+    return TRUE;
+
+error:
+    if (devices_dir)
+        g_dir_close(devices_dir);
+
+    return FALSE;
+}
+
+static void disable_i8042_debugging() {
+    g_warn_if_fail(write_to_char_dev("/sys/module/i8042/parameters/debug",
+                                     NULL, "0\n"));
+
+    exit(0);
+}
+
 static gboolean record(GError **error) {
     __label__ log_msg_error;
     GIOChannel *input_channel = g_io_channel_new_file(input_path, "r", error);
@@ -307,13 +462,30 @@ static gboolean record(GError **error) {
     if (!input_channel)
         return FALSE;
 
+    /* If we're not reading from a log and we put the devices into debug mode
+     * ourselves, find the spot in the kernel log to begin to read from */
+    if (start_time) {
+        while ((rc = parse_next_message(input_channel, &res, error)) ==
+               G_IO_STATUS_NORMAL) {
+            if (res.type == I8042_OUTPUT)
+                continue;
+            else if (res.type == SERIO_OUTPUT)
+                process_new_port(&res.port);
+            else if (res.start_time == start_time) {
+                log_msg_result_clear(&res);
+
+                break;
+            }
+        }
+    }
+
     while ((rc = parse_next_message(input_channel, &res, error)) ==
            G_IO_STATUS_NORMAL) {
         if (res.type == I8042_OUTPUT) {
             if (!process_event(&res.event, error))
                 goto log_msg_error;
         }
-        else /* res.type == SERIO_OUTPUT */
+        else if (res.type == SERIO_OUTPUT)
             process_new_port(&res.port);
 
         log_msg_result_clear(&res);
@@ -397,26 +569,23 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1)
         input_path = argv[1];
-    else {
-        gchar *cmdline = NULL;
 
-        /* If we're reading from /dev/kmsg, we won't get anything useful if the
-         * i8042.debug=1 parameter isn't passed to the kernel on boot. To help a
-         * potentially confused user, warn them if i8042.debug=1 isn't on and
-         * they're trying to read from the kernel log */
-        if (g_file_get_contents("/proc/cmdline", &cmdline, NULL, &error)) {
-            if (!strstr(cmdline, "i8042.debug=1")) {
-                g_warning("You're trying to record PS/2 events from the kernel "
-                          "log, but you didn't boot with `i8042.debug=1` "
-                          "added to your kernel boot parameters. As a result, "
-                          "it is very unlikely this application will work "
-                          "properly. Please reboot your computer with this "
-                          "option enabled.");
-            }
+    if (strcmp(input_path, "/dev/kmsg") == 0) {
+        struct sigaction sigaction_struct;
 
+        if (!enable_i8042_debugging(&error)) {
+            fprintf(stderr,
+                    "Failed to enable i8042 debugging: %s\n",
+                    error->message);
+            exit(1);
         }
 
-        g_free(cmdline);
+        memset(&sigaction_struct, 0, sizeof(sigaction_struct));
+        sigaction_struct.sa_handler = disable_i8042_debugging;
+
+        g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
+        g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
+        g_warn_if_fail(sigaction(SIGHUP, &sigaction_struct, NULL) == 0);
     }
 
     g_option_context_free(main_context);
