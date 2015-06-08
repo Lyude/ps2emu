@@ -25,7 +25,8 @@
 #include "ps2emu-event.h"
 
 typedef enum {
-    PS2_ERROR_INPUT
+    PS2_ERROR_INPUT,
+    PS2_ERROR_NO_EVENTS
 } PS2Error;
 
 typedef struct {
@@ -417,6 +418,11 @@ static gboolean record(GError **error) {
                 continue;
             else if (res.start_time == start_time)
                 break;
+        }
+        if (rc != G_IO_STATUS_NORMAL) {
+            g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
+                                "Reached EOF of /dev/kmsg and got no events");
+            return FALSE;
         }
     }
 
