@@ -231,7 +231,7 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
                 break;
 
             if (*error)
-                return rc;
+                goto fail;
 
             if (parse_interrupt_without_data(start_pos, &res->event, error))
                 break;
