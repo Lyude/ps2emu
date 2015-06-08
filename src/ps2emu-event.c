@@ -30,10 +30,10 @@ gchar * ps2_event_to_string(PS2Event *event) {
         data_str = "NONE";
 
     if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-        event_str = g_strdup_printf("%-10ld %-9s %5s %2hd",
+        event_str = g_strdup_printf("%-10ld %-9s %5s %2hd %2hd",
                                     event->time,
                                     ps2_event_type_to_string(event->type),
-                                    data_str, event->irq);
+                                    data_str, event->port, event->irq);
     }
     else {
         event_str = g_strdup_printf("%-10ld %-9s %5s",

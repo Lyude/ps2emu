@@ -31,6 +31,7 @@ typedef struct {
     PS2EventType type;
     gboolean     has_data;
     guchar       data;
+    gushort      port;
     gushort      irq;
 } PS2Event;
 
