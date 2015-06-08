@@ -16,9 +16,7 @@
 #include "ps2emu-event.h"
 
 #include <stdio.h>
-
 #include <glib.h>
-#include <glib-object.h>
 
 gchar * ps2_event_to_string(PS2Event *event) {
     gchar *event_str;

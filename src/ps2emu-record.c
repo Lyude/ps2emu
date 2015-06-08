@@ -19,7 +19,6 @@
 #include <errno.h>
 #include <error.h>
 #include <glib.h>
-#include <glib-object.h>
 
 #include "misc.h"
 #include "ps2emu-event.h"
