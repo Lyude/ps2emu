@@ -311,8 +311,16 @@ error:
     return FALSE;
 }
 
+static void disable_i8042_debugging() {
+    g_warn_if_fail(write_to_char_dev("/sys/module/i8042/parameters/debug",
+                                     NULL, "0\n"));
+
+    exit(0);
+}
+
 static gboolean enable_i8042_debugging(GError **error) {
     GDir *devices_dir = NULL;
+    struct sigaction sigaction_struct;
 
     devices_dir = g_dir_open("/sys/devices/platform/i8042", 0, error);
     if (!devices_dir) {
@@ -379,6 +387,14 @@ static gboolean enable_i8042_debugging(GError **error) {
 
     g_dir_close(devices_dir);
 
+    /* Disable debugging when this application quits */
+    memset(&sigaction_struct, 0, sizeof(sigaction_struct));
+    sigaction_struct.sa_handler = disable_i8042_debugging;
+
+    g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
+    g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
+    g_warn_if_fail(sigaction(SIGHUP, &sigaction_struct, NULL) == 0);
+
     return TRUE;
 
 error:
@@ -386,13 +402,6 @@ error:
         g_dir_close(devices_dir);
 
     return FALSE;
-}
-
-static void disable_i8042_debugging() {
-    g_warn_if_fail(write_to_char_dev("/sys/module/i8042/parameters/debug",
-                                     NULL, "0\n"));
-
-    exit(0);
 }
 
 static gboolean record(GError **error) {
@@ -496,21 +505,12 @@ int main(int argc, char *argv[]) {
     if (!record_kbd && !record_aux)
         exit_on_bad_argument(main_context, FALSE, "Nothing to record!");
 
-    struct sigaction sigaction_struct;
-
     if (!enable_i8042_debugging(&error)) {
         fprintf(stderr,
                 "Failed to enable i8042 debugging: %s\n",
                 error->message);
         exit(1);
     }
-
-    memset(&sigaction_struct, 0, sizeof(sigaction_struct));
-    sigaction_struct.sa_handler = disable_i8042_debugging;
-
-    g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
-    g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
-    g_warn_if_fail(sigaction(SIGHUP, &sigaction_struct, NULL) == 0);
 
     g_option_context_free(main_context);
 
