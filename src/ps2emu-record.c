@@ -43,6 +43,8 @@ static gboolean record_aux;
 
 static gint64 start_time = 0;
 
+static GHashTable *ports;
+
 #define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
 #define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
 
@@ -232,7 +234,30 @@ fail:
 }
 
 static void process_event(PS2Event *event) {
+    static gboolean ignoring_events = FALSE;
     gchar *event_str = NULL;
+
+    /* Any commands that we receive with any of the port numbers are just part
+     * of the i8042 probing, and can't be forwarded over serio in the relay
+     * module. Ignore all data we read starting from commands like this, until
+     * we reach a different command */
+    if (!ignoring_events) {
+        if (event->type == PS2_EVENT_TYPE_COMMAND &&
+            g_hash_table_contains(ports, GUINT_TO_POINTER(event->data))) {
+
+            ignoring_events = TRUE;
+            return;
+        }
+    }
+    else {
+        if (event->type == PS2_EVENT_TYPE_COMMAND &&
+            !g_hash_table_contains(ports, GUINT_TO_POINTER(event->data))) {
+
+            ignoring_events = FALSE;
+        }
+        else
+            return;
+    }
 
     /* The logic here is that we can only get two types of events from a
      * keyboard, kbd-data and interrupt. No other device sends kbd-data, so we
@@ -308,6 +333,44 @@ error:
     g_free(data);
 
     return FALSE;
+}
+
+static gboolean get_i8042_io_ports(GError **error) {
+    GIOChannel *io_ports_file = g_io_channel_new_file("/proc/ioports", "r",
+                                                      error);
+    gchar *line;
+    GIOStatus rc;
+
+    ports = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+    if (!io_ports_file)
+        return FALSE;
+
+    for (rc = g_io_channel_read_line(io_ports_file, &line, NULL, NULL, error);
+         rc == G_IO_STATUS_NORMAL;
+         rc = g_io_channel_read_line(io_ports_file, &line, NULL, NULL, error)) {
+        guint min, max;
+        gint parsed_count;
+        gchar *device_name;
+
+        errno = 0;
+        parsed_count = sscanf(line, "%x-%x : %m[^\n]\n",
+                              &min, &max, &device_name);
+        if (parsed_count != 3 || errno != 0 ||
+            strcmp(device_name, "keyboard") != 0)
+            goto next;
+
+        for (int i = min; i <= max; i++) {
+            g_hash_table_insert(ports, GUINT_TO_POINTER(i),
+                                GUINT_TO_POINTER(i));
+        }
+next:
+        g_free(line);
+    }
+
+    g_io_channel_unref(io_ports_file);
+
+    return TRUE;
 }
 
 static void disable_i8042_debugging() {
@@ -501,6 +564,13 @@ int main(int argc, char *argv[]) {
     /* Throw an error if recording of both KBD and AUX is disabled */
     if (!record_kbd && !record_aux)
         exit_on_bad_argument(main_context, FALSE, "Nothing to record!");
+
+    if (!get_i8042_io_ports(&error)) {
+        fprintf(stderr,
+                "Failed to read /proc/ioports: %s\n",
+                error->message);
+        exit(1);
+    }
 
     if (!enable_i8042_debugging(&error)) {
         fprintf(stderr,
