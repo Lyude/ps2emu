@@ -23,7 +23,8 @@ gchar * ps2_event_to_string(PS2Event *event,
                             time_t time) {
     gchar *event_str,
           *comment;
-    gchar origin;
+    gchar origin,
+          direction;
 
     if (event->type == PS2_EVENT_TYPE_KBD_DATA ||
         (event->type == PS2_EVENT_TYPE_INTERRUPT &&
@@ -32,13 +33,18 @@ gchar * ps2_event_to_string(PS2Event *event,
     else
         origin = 'A';
 
+    if (event->type == PS2_EVENT_TYPE_INTERRUPT)
+        direction = 'R'; /* received */
+    else
+        direction = 'S'; /* sent */
+
     /* Find the first paranthesis in the original message from dmesg, and
      * include that as a comment with the line */
     comment = g_strdup(strstr(event->original_line, "("));
     g_strchomp(comment);
 
-    event_str = g_strdup_printf("%-10ld %c %.2hhx # %s",
-                                time, origin, event->data, comment);
+    event_str = g_strdup_printf("%-10ld %c %c %.2hhx # %s",
+                                time, origin, direction, event->data, comment);
     g_free(comment);
 
     return event_str;
