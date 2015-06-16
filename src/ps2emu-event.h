@@ -29,9 +29,10 @@ typedef enum {
 } PS2EventType;
 
 typedef struct {
-    PS2EventType type;
-    guchar       data;
-    gushort      port;
+    PS2EventType  type;
+    guchar        data;
+    gushort       port;
+    const gchar  *original_line;
 } PS2Event;
 
 gchar * ps2_event_to_string(PS2Event *event,

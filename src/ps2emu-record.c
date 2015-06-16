@@ -135,6 +135,8 @@ static gboolean parse_normal_event(const gchar *start_pos,
     else if (strcmp(type_str, "kbd-data") == 0)
         event->type = PS2_EVENT_TYPE_KBD_DATA;
 
+    event->original_line = start_pos;
+
     g_free(type_str);
     g_strfreev(type_str_args);
 

@@ -16,11 +16,13 @@
 #include "ps2emu-event.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <glib.h>
 
 gchar * ps2_event_to_string(PS2Event *event,
                             time_t time) {
-    gchar *event_str;
+    gchar *event_str,
+          *comment;
     gchar origin;
 
     if (event->type == PS2_EVENT_TYPE_KBD_DATA ||
@@ -30,8 +32,14 @@ gchar * ps2_event_to_string(PS2Event *event,
     else
         origin = 'A';
 
-    event_str = g_strdup_printf("%-10ld %c %.2hhx",
-                                time, origin, event->data);
+    /* Find the first paranthesis in the original message from dmesg, and
+     * include that as a comment with the line */
+    comment = g_strdup(strstr(event->original_line, "("));
+    g_strchomp(comment);
+
+    event_str = g_strdup_printf("%-10ld %c %.2hhx # %s",
+                                time, origin, event->data, comment);
+    g_free(comment);
 
     return event_str;
 }
