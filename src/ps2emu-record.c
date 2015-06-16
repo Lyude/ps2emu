@@ -32,6 +32,8 @@ typedef enum {
 typedef struct {
     GQuark type;
 
+    time_t dmesg_time;
+
     union {
         PS2Event event;
         gint64 start_time;
@@ -42,6 +44,7 @@ static gboolean record_kbd;
 static gboolean record_aux;
 
 static gint64 start_time = 0;
+static time_t dmesg_start_time = 0;
 
 static GHashTable *ports;
 
@@ -94,10 +97,10 @@ static gboolean parse_normal_event(const gchar *start_pos,
 
     errno = 0;
     parsed_count = sscanf(start_pos,
-                          "[%ld] %hhx %*1[-<]%*1[->] i8042 (%m[^)])\n",
-                          &event->time, &event->data, &type_str);
+                          "[%*d] %hhx %*1[-<]%*1[->] i8042 (%m[^)])\n",
+                          &event->data, &type_str);
 
-    if (errno != 0 || parsed_count != 3)
+    if (errno != 0 || parsed_count != 2)
         return FALSE;
 
     type_str_args = g_strsplit(type_str, ",", 0);
@@ -164,6 +167,7 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
                                     GError **error) {
     gchar *start_pos;
     gchar *current_line = NULL;
+    gint parsed_count;
     GIOStatus rc;
 
     while ((rc = get_next_module_line(input_channel, &res->type, &current_line,
@@ -187,6 +191,16 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
     if (rc != G_IO_STATUS_NORMAL)
         return rc;
 
+    /* Parse the time value at the beginning of the message */
+    errno = 0;
+    parsed_count = sscanf(current_line, "%*d,%*d,%ld", &res->dmesg_time);
+    if (parsed_count != 1 || errno != 0) {
+        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+                    "Invalid/no time value received: %s", strerror(errno));
+
+        rc = G_IO_STATUS_ERROR;
+    }
+
     res->type = res->type;
 
 fail:
@@ -195,7 +209,8 @@ fail:
     return rc;
 }
 
-static void process_event(PS2Event *event) {
+static void process_event(PS2Event *event,
+                          time_t time) {
     static gboolean ignoring_events = FALSE;
     gchar *event_str = NULL;
 
@@ -245,7 +260,10 @@ static void process_event(PS2Event *event) {
             return;
     }
 
-    event_str = ps2_event_to_string(event);
+    if (!dmesg_start_time)
+        dmesg_start_time = time;
+
+    event_str = ps2_event_to_string(event, time - dmesg_start_time);
     printf("%s\n", event_str);
 
     g_free(event_str);
@@ -443,7 +461,7 @@ static gboolean record(GError **error) {
                G_IO_STATUS_NORMAL) {
             if (res.type == I8042_OUTPUT)
                 continue;
-            else if (res.start_time == start_time)
+            else if (res.start_time >= start_time)
                 break;
         }
         if (rc != G_IO_STATUS_NORMAL) {
@@ -456,7 +474,7 @@ static gboolean record(GError **error) {
     while ((rc = parse_next_message(input_channel, &res, error)) ==
            G_IO_STATUS_NORMAL) {
         if (res.type == I8042_OUTPUT)
-            process_event(&res.event);
+            process_event(&res.event, res.dmesg_time);
     }
 
     return TRUE;

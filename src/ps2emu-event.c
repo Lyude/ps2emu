@@ -18,7 +18,8 @@
 #include <stdio.h>
 #include <glib.h>
 
-gchar * ps2_event_to_string(PS2Event *event) {
+gchar * ps2_event_to_string(PS2Event *event,
+                            time_t time) {
     gchar *event_str;
     gchar origin;
 
@@ -30,7 +31,7 @@ gchar * ps2_event_to_string(PS2Event *event) {
         origin = 'A';
 
     event_str = g_strdup_printf("%-10ld %c %.2hhx",
-                                event->time, origin, event->data);
+                                time, origin, event->data);
 
     return event_str;
 }
