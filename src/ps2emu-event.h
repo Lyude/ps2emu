@@ -29,7 +29,6 @@ typedef enum {
 typedef struct {
     time_t       time;
     PS2EventType type;
-    gboolean     has_data;
     guchar       data;
     gushort      port;
     gushort      irq;

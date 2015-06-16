@@ -157,25 +157,6 @@ error:
     return FALSE;
 }
 
-static gboolean parse_interrupt_without_data(const gchar *start_pos,
-                                             PS2Event *event,
-                                             GError **error) {
-    int parsed_count;
-
-    errno = 0;
-    parsed_count = sscanf(start_pos,
-                          "[%ld] Interrupt %hd, without any data\n",
-                          &event->time, &event->irq);
-
-    if (errno != 0 || parsed_count != 2)
-        return FALSE;
-
-    event->type = PS2_EVENT_TYPE_INTERRUPT;
-    event->has_data = FALSE;
-
-    return TRUE;
-}
-
 static gboolean parse_record_start_marker(const gchar *start_pos,
                                           gint64 *start_time) {
     gint parsed_count;
@@ -203,12 +184,6 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
             G_IO_STATUS_NORMAL) {
         if (res->type == I8042_OUTPUT) {
             if (parse_normal_event(start_pos, &res->event, error))
-                break;
-
-            if (*error)
-                goto fail;
-
-            if (parse_interrupt_without_data(start_pos, &res->event, error))
                 break;
 
             if (*error)
