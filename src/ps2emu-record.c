@@ -87,7 +87,6 @@ static GIOStatus get_next_module_line(GIOChannel *input_channel,
 static gboolean parse_normal_event(const gchar *start_pos,
                                    PS2Event *event,
                                    GError **error) {
-    __label__ error;
     gchar *type_str = NULL;
     gchar **type_str_args = NULL;
     int type_str_argc,
@@ -193,7 +192,6 @@ static gboolean parse_record_start_marker(const gchar *start_pos,
 static GIOStatus parse_next_message(GIOChannel *input_channel,
                                     LogMsgParseResult *res,
                                     GError **error) {
-    __label__ fail;
     gchar *start_pos;
     gchar *current_line = NULL;
     GIOStatus rc;
@@ -273,7 +271,6 @@ static gboolean write_to_char_dev(const gchar *cdev,
                                   GError **error,
                                   const gchar *format,
                                   ...) {
-    __label__ error;
     GIOChannel *channel = g_io_channel_new_file(cdev, "w", error);
     GIOStatus rc;
     gchar *data = NULL;
@@ -315,7 +312,6 @@ error:
 }
 
 static gboolean enable_i8042_debugging(GError **error) {
-    __label__ error;
     GDir *devices_dir = NULL;
 
     devices_dir = g_dir_open("/sys/devices/platform/i8042", 0, error);
