@@ -20,9 +20,17 @@
 
 gchar * ps2_event_to_string(PS2Event *event) {
     gchar *event_str;
+    gchar origin;
 
-    event_str = g_strdup_printf("%-10ld %.2hhx",
-                                event->time, event->data);
+    if (event->type == PS2_EVENT_TYPE_KBD_DATA ||
+        (event->type == PS2_EVENT_TYPE_INTERRUPT &&
+         event->port == PS2_KEYBOARD_PORT))
+        origin = 'K';
+    else
+        origin = 'A';
+
+    event_str = g_strdup_printf("%-10ld %c %.2hhx",
+                                event->time, origin, event->data);
 
     return event_str;
 }
