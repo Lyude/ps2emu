@@ -231,8 +231,7 @@ fail:
     return rc;
 }
 
-static gboolean process_event(PS2Event *event,
-                              GError **error) {
+static void process_event(PS2Event *event) {
     gchar *event_str = NULL;
 
     /* The logic here is that we can only get two types of events from a
@@ -244,19 +243,19 @@ static gboolean process_event(PS2Event *event,
     if (!record_kbd) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT &&
             event->port == KEYBOARD_PORT)
-            return TRUE;
+            return;
 
         if (event->type == PS2_EVENT_TYPE_KBD_DATA)
-            return TRUE;
+            return;
     }
 
     if (!record_aux) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
             if (event->port != KEYBOARD_PORT)
-                return TRUE;
+                return;
         }
         else if (event->type != PS2_EVENT_TYPE_KBD_DATA)
-            return TRUE;
+            return;
     }
 
     event_str = ps2_event_to_string(event);
@@ -264,7 +263,7 @@ static gboolean process_event(PS2Event *event,
 
     g_free(event_str);
 
-    return TRUE;
+    return;
 }
 
 static gboolean write_to_char_dev(const gchar *cdev,
@@ -431,10 +430,8 @@ static gboolean record(GError **error) {
 
     while ((rc = parse_next_message(input_channel, &res, error)) ==
            G_IO_STATUS_NORMAL) {
-        if (res.type == I8042_OUTPUT) {
-            if (!process_event(&res.event, error))
-                return FALSE;
-        }
+        if (res.type == I8042_OUTPUT)
+            process_event(&res.event);
     }
 
     return TRUE;
