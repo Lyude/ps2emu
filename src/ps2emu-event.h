@@ -18,6 +18,8 @@
 
 #include <glib.h>
 
+#define PS2_KEYBOARD_PORT 0
+
 typedef enum {
     PS2_EVENT_TYPE_COMMAND,
     PS2_EVENT_TYPE_PARAMETER,

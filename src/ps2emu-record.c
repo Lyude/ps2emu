@@ -48,8 +48,6 @@ static GHashTable *ports;
 #define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
 #define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
 
-#define KEYBOARD_PORT 0
-
 static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       GQuark *match,
                                       gchar **output,
@@ -231,7 +229,7 @@ static void process_event(PS2Event *event) {
      * port */
     if (!record_kbd) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT &&
-            event->port == KEYBOARD_PORT)
+            event->port == PS2_KEYBOARD_PORT)
             return;
 
         if (event->type == PS2_EVENT_TYPE_KBD_DATA)
@@ -240,7 +238,7 @@ static void process_event(PS2Event *event) {
 
     if (!record_aux) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-            if (event->port != KEYBOARD_PORT)
+            if (event->port != PS2_KEYBOARD_PORT)
                 return;
         }
         else if (event->type != PS2_EVENT_TYPE_KBD_DATA)
