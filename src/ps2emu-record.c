@@ -38,8 +38,6 @@ typedef struct {
     };
 } LogMsgParseResult;
 
-static char *input_path = "/dev/kmsg";
-
 static gboolean record_kbd;
 static gboolean record_aux;
 
@@ -402,7 +400,7 @@ static void disable_i8042_debugging() {
 }
 
 static gboolean record(GError **error) {
-    GIOChannel *input_channel = g_io_channel_new_file(input_path, "r", error);
+    GIOChannel *input_channel = g_io_channel_new_file("/dev/kmsg", "r", error);
     LogMsgParseResult res;
     GIOStatus rc;
 
@@ -439,7 +437,7 @@ static gboolean record(GError **error) {
 
 int main(int argc, char *argv[]) {
     GOptionContext *main_context =
-        g_option_context_new("[file] - record PS/2 devices");
+        g_option_context_new("record PS/2 devices");
     gboolean rc;
     GError *error = NULL;
     gchar *record_kbd_str = NULL,
@@ -464,9 +462,6 @@ int main(int argc, char *argv[]) {
         "Allows the recording of all of the commands going in/out of a PS/2\n"
         "port, so that they may later be replayed using a virtual PS/2\n"
         "controller on another person's machine.\n"
-        "\n"
-        "If [file] is not specified, ps2emu-record will read from the kernel\n"
-        "log (/dev/kmsg).\n"
         "\n"
         "By default, ps2emu-record does not record keyboard input. This is\n"
         "is because recording the user's keyboard input has the consequence\n"
@@ -505,26 +500,21 @@ int main(int argc, char *argv[]) {
     if (!record_kbd && !record_aux)
         exit_on_bad_argument(main_context, FALSE, "Nothing to record!");
 
-    if (argc > 1)
-        input_path = argv[1];
+    struct sigaction sigaction_struct;
 
-    if (strcmp(input_path, "/dev/kmsg") == 0) {
-        struct sigaction sigaction_struct;
-
-        if (!enable_i8042_debugging(&error)) {
-            fprintf(stderr,
-                    "Failed to enable i8042 debugging: %s\n",
-                    error->message);
-            exit(1);
-        }
-
-        memset(&sigaction_struct, 0, sizeof(sigaction_struct));
-        sigaction_struct.sa_handler = disable_i8042_debugging;
-
-        g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
-        g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
-        g_warn_if_fail(sigaction(SIGHUP, &sigaction_struct, NULL) == 0);
+    if (!enable_i8042_debugging(&error)) {
+        fprintf(stderr,
+                "Failed to enable i8042 debugging: %s\n",
+                error->message);
+        exit(1);
     }
+
+    memset(&sigaction_struct, 0, sizeof(sigaction_struct));
+    sigaction_struct.sa_handler = disable_i8042_debugging;
+
+    g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
+    g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
+    g_warn_if_fail(sigaction(SIGHUP, &sigaction_struct, NULL) == 0);
 
     g_option_context_free(main_context);
 
