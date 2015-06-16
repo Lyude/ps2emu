@@ -238,6 +238,12 @@ static void process_event(PS2Event *event,
             return;
     }
 
+    /* Filter out all commands that have made it to this point. With i8042's
+     * debug output, commands just mark the recepient of the message which we
+     * don't need (with the AUX port anyway), and can't use with serio */
+    if (event->type == PS2_EVENT_TYPE_COMMAND)
+        return;
+
     /* The logic here is that we can only get two types of events from a
      * keyboard, kbd-data and interrupt. No other device sends kbd-data, so we
      * can judge if an event comes from a keyboard or not solely based off that.
