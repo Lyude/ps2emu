@@ -462,6 +462,8 @@ static gboolean record(GError **error) {
     if (!input_channel)
         return FALSE;
 
+    printf("# ps2emu-record V0\n");
+
     /* If we're not reading from a log and we put the devices into debug mode
      * ourselves, find the spot in the kernel log to begin to read from */
     if (start_time) {
