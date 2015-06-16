@@ -31,32 +31,7 @@ typedef struct {
     PS2EventType type;
     guchar       data;
     gushort      port;
-    gushort      irq;
 } PS2Event;
-
-static inline gchar* ps2_event_type_to_string(PS2EventType type) {
-    gchar *type_str;
-
-    switch (type) {
-        case PS2_EVENT_TYPE_COMMAND:
-            type_str = "Command";
-            break;
-        case PS2_EVENT_TYPE_PARAMETER:
-            type_str = "Parameter";
-            break;
-        case PS2_EVENT_TYPE_RETURN:
-            type_str = "Return";
-            break;
-        case PS2_EVENT_TYPE_KBD_DATA:
-            type_str = "Kbd-data";
-            break;
-        case PS2_EVENT_TYPE_INTERRUPT:
-            type_str = "Interrupt";
-            break;
-    }
-
-    return type_str;
-}
 
 gchar * ps2_event_to_string(PS2Event *event)
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;

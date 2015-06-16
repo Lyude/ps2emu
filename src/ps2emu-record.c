@@ -124,15 +124,6 @@ static gboolean parse_normal_event(const gchar *start_pos,
                         strerror(errno));
             goto error;
         }
-
-        errno = 0;
-        event->irq = strtol(type_str_args[2], NULL, 10);
-        if (errno != 0) {
-            g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
-                        "Failed to parse IRQ from interrupt event: %s\n",
-                        strerror(errno));
-            goto error;
-        }
     }
     else if (strcmp(type_str, "command") == 0)
         event->type = PS2_EVENT_TYPE_COMMAND;
@@ -142,8 +133,6 @@ static gboolean parse_normal_event(const gchar *start_pos,
         event->type = PS2_EVENT_TYPE_RETURN;
     else if (strcmp(type_str, "kbd-data") == 0)
         event->type = PS2_EVENT_TYPE_KBD_DATA;
-
-    event->has_data = TRUE;
 
     g_free(type_str);
     g_strfreev(type_str_args);
