@@ -31,7 +31,10 @@ typedef enum {
 typedef struct {
     PS2EventType  type;
     guchar        data;
-    gushort       port;
+    enum {
+        PS2_EVENT_ORIGIN_KEYBOARD,
+        PS2_EVENT_ORIGIN_AUX
+    } origin;
     const gchar  *original_line;
 } PS2Event;
 

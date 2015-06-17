@@ -28,7 +28,7 @@ gchar * ps2_event_to_string(PS2Event *event,
 
     if (event->type == PS2_EVENT_TYPE_KBD_DATA ||
         (event->type == PS2_EVENT_TYPE_INTERRUPT &&
-         event->port == PS2_KEYBOARD_PORT))
+         event->origin == PS2_EVENT_ORIGIN_KEYBOARD))
         origin = 'K';
     else
         origin = 'A';

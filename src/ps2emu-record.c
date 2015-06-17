@@ -88,7 +88,8 @@ static gboolean parse_normal_event(const gchar *start_pos,
     gchar *type_str = NULL;
     gchar **type_str_args = NULL;
     int type_str_argc,
-        parsed_count;
+        parsed_count,
+        port;
 
     errno = 0;
     parsed_count = sscanf(start_pos,
@@ -112,7 +113,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
         }
 
         errno = 0;
-        event->port = strtol(type_str_args[1], NULL, 10);
+        port = strtol(type_str_args[1], NULL, 10);
         if (errno != 0) {
             g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
                         "Failed to parse port number from interrupt event: "
@@ -120,6 +121,9 @@ static gboolean parse_normal_event(const gchar *start_pos,
                         strerror(errno));
             goto error;
         }
+
+        event->origin = (port == PS2_KEYBOARD_PORT) ?
+            PS2_EVENT_ORIGIN_KEYBOARD : PS2_EVENT_ORIGIN_AUX;
     }
     else if (strcmp(type_str, "command") == 0)
         event->type = PS2_EVENT_TYPE_COMMAND;
@@ -247,7 +251,7 @@ static void process_event(PS2Event *event,
      * port */
     if (!record_kbd) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT &&
-            event->port == PS2_KEYBOARD_PORT)
+            event->origin == PS2_EVENT_ORIGIN_KEYBOARD)
             return;
 
         if (event->type == PS2_EVENT_TYPE_KBD_DATA)
@@ -256,7 +260,7 @@ static void process_event(PS2Event *event,
 
     if (!record_aux) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-            if (event->port != PS2_KEYBOARD_PORT)
+            if (event->origin == PS2_EVENT_ORIGIN_AUX)
                 return;
         }
         else if (event->type != PS2_EVENT_TYPE_KBD_DATA)
