@@ -33,7 +33,8 @@ gchar * ps2_event_to_string(PS2Event *event,
     else
         origin = 'A';
 
-    if (event->type == PS2_EVENT_TYPE_INTERRUPT)
+    if (event->type == PS2_EVENT_TYPE_INTERRUPT ||
+        event->type == PS2_EVENT_TYPE_RETURN)
         direction = 'R'; /* received */
     else
         direction = 'S'; /* sent */
