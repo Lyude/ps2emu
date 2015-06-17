@@ -22,6 +22,11 @@
 
 #define PS2EMU_ERROR (g_quark_from_static_string("ps2emu-error"))
 
+typedef enum {
+    PS2_ERROR_INPUT,
+    PS2_ERROR_NO_EVENTS
+} PS2Error;
+
 static inline void exit_on_bad_argument(GOptionContext *option_context,
                                         gboolean print_help,
                                         const gchar *format,

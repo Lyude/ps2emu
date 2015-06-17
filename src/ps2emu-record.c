@@ -24,11 +24,6 @@
 #include "misc.h"
 #include "ps2emu-event.h"
 
-typedef enum {
-    PS2_ERROR_INPUT,
-    PS2_ERROR_NO_EVENTS
-} PS2Error;
-
 typedef struct {
     GQuark type;
 
