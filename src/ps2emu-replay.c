@@ -22,8 +22,8 @@
 
 GSList *event_list;
 
-gboolean replay(GIOChannel *ps2emu_channel,
-                GError **error) {
+static gboolean replay(GIOChannel *ps2emu_channel,
+                       GError **error) {
     PS2Event *event;
     GIOStatus rc;
     const time_t start_time = g_get_monotonic_time();
@@ -63,8 +63,8 @@ gboolean replay(GIOChannel *ps2emu_channel,
     return TRUE;
 }
 
-gboolean parse_events(GIOChannel *input_channel,
-                      GError **error) {
+static gboolean parse_events(GIOChannel *input_channel,
+                             GError **error) {
     gchar *line;
     GIOStatus rc;
 
