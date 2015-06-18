@@ -29,6 +29,7 @@ typedef enum {
 } PS2EventType;
 
 typedef struct {
+    time_t        time;
     PS2EventType  type;
     guchar        data;
     enum {
@@ -40,6 +41,10 @@ typedef struct {
 
 gchar * ps2_event_to_string(PS2Event *event,
                             time_t start_time)
+G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
+
+PS2Event * ps2_event_from_line(const gchar *str,
+                               GError **error)
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
 #endif /* !__PS2EMU_EVENT_H__ */

@@ -14,9 +14,11 @@
  */
 
 #include "ps2emu-event.h"
+#include "misc.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <glib.h>
 
 gchar * ps2_event_to_string(PS2Event *event,
@@ -49,4 +51,58 @@ gchar * ps2_event_to_string(PS2Event *event,
     g_free(comment);
 
     return event_str;
+}
+
+PS2Event * ps2_event_from_line(const gchar *str,
+                               GError **error) {
+    gchar const *str_start = &str[strspn(str, " \t")];
+    int parsed_count;
+    char origin_char,
+         direction_char;
+    PS2Event *new_event = NULL;
+
+    if (*str_start == '#')
+        return FALSE;
+
+    new_event = g_slice_alloc(sizeof(PS2Event));
+
+    errno = 0;
+    parsed_count = sscanf(str_start, "%ld %c %c %hhx",
+                          &new_event->time, &origin_char, &direction_char,
+                          &new_event->data);
+    if (errno != 0 || parsed_count != 4) {
+        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+                    "Invalid event line '%s'", str);
+        goto error;
+    }
+
+    if (origin_char == 'K')
+        new_event->origin = PS2_EVENT_ORIGIN_KEYBOARD;
+    else if (origin_char == 'A')
+        new_event->origin = PS2_EVENT_ORIGIN_AUX;
+    else {
+        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+                    "Invalid event origin '%c' from '%s'", origin_char, str);
+        goto error;
+    }
+
+    if (direction_char == 'S')
+        new_event->type = PS2_EVENT_TYPE_PARAMETER;
+    /* It might also be a return, but the serio port doesn't care either way */
+    else if (direction_char == 'R')
+        new_event->type = PS2_EVENT_TYPE_INTERRUPT;
+    else {
+        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+                    "Invalid event direction '%c' from '%s'",
+                    direction_char, str);
+        goto error;
+    }
+
+    return new_event;
+
+error:
+    if (new_event)
+        g_slice_free(PS2Event, new_event);
+
+    return NULL;
 }
