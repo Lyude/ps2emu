@@ -1,0 +1,3 @@
+[submodule "ps2emu-kmod"]
+	path = ps2emu-kmod
+	url = https://github.com/Lyude/ps2emu-kmod
