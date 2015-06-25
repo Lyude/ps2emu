@@ -19,8 +19,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
+#include <linux/serio.h>
+#include <ps2emu.h>
 
 GSList *event_list;
+
+static GIOStatus send_ps2emu_cmd(GIOChannel *ps2emu_channel,
+                                 guint8 type,
+                                 guint8 data,
+                                 GError **error) {
+    GIOStatus rc;
+    struct ps2emu_cmd cmd = {
+        .type = type,
+        .data = data,
+    };
+
+    rc = g_io_channel_write_chars(ps2emu_channel, (gchar*)&cmd, sizeof(cmd),
+                                  NULL, error);
+    return rc;
+}
 
 static gboolean replay(GIOChannel *ps2emu_channel,
                        GError **error) {
@@ -38,9 +55,8 @@ static gboolean replay(GIOChannel *ps2emu_channel,
             if (current_time < event->time)
                 g_usleep(event->time - current_time);
 
-            rc = g_io_channel_write_chars(ps2emu_channel, (gchar*)&event->data,
-                                          sizeof(event->data), NULL, error);
-
+            rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_SEND_INTERRUPT,
+                                 event->data, error);
             if (rc != G_IO_STATUS_NORMAL)
                 return FALSE;
         } else {
@@ -124,6 +140,19 @@ gint main(gint argc,
         goto error;
     }
     g_io_channel_set_buffered(ps2emu_channel, FALSE);
+
+    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_SET_PORT_TYPE, SERIO_8042,
+                         &error);
+    if (rc != G_IO_STATUS_NORMAL) {
+        g_prefix_error(&error, "While setting port type on /dev/ps2emu: ");
+        goto error;
+    }
+
+    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_BEGIN, SERIO_8042, &error);
+    if (rc != G_IO_STATUS_NORMAL) {
+        g_prefix_error(&error, "While starting device on /dev/ps2emu: ");
+        goto error;
+    }
 
     if (!replay(ps2emu_channel, &error))
         goto error;

@@ -1,4 +1,4 @@
-AM_CFLAGS = -std=gnu11 $(GLIB_CFLAGS) -Wall
+AM_CFLAGS = -std=gnu11 $(GLIB_CFLAGS) -Wall -I$(top_srcdir)/ps2emu-kmod
 AM_LDFLAGS = $(GLIB_LIBS) $(GLIB_LDFLAGS)
 
 sbin_PROGRAMS = ps2emu-record \
