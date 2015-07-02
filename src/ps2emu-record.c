@@ -470,21 +470,17 @@ static gboolean record(GError **error) {
     if (rc != G_IO_STATUS_NORMAL)
         return FALSE;
 
-    /* If we're not reading from a log and we put the devices into debug mode
-     * ourselves, find the spot in the kernel log to begin to read from */
-    if (start_time) {
-        while ((rc = parse_next_message(input_channel, &res, error)) ==
-               G_IO_STATUS_NORMAL) {
-            if (res.type == I8042_OUTPUT)
-                continue;
-            else if (res.start_time >= start_time)
-                break;
-        }
-        if (rc != G_IO_STATUS_NORMAL) {
-            g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
-                                "Reached EOF of /dev/kmsg and got no events");
-            return FALSE;
-        }
+    while ((rc = parse_next_message(input_channel, &res, error)) ==
+           G_IO_STATUS_NORMAL) {
+        if (res.type == I8042_OUTPUT)
+            continue;
+        else if (res.start_time >= start_time)
+            break;
+    }
+    if (rc != G_IO_STATUS_NORMAL) {
+        g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
+                            "Reached EOF of /dev/kmsg and got no events");
+        return FALSE;
     }
 
     while ((rc = parse_next_message(input_channel, &res, error)) ==
