@@ -23,7 +23,7 @@
 #include <linux/serio.h>
 #include <ps2emu.h>
 
-GSList *event_list;
+static GSList *event_list;
 
 static GIOStatus send_ps2emu_cmd(GIOChannel *ps2emu_channel,
                                  guint8 type,
