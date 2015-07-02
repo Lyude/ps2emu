@@ -107,15 +107,31 @@ static gboolean parse_events(GIOChannel *input_channel,
 
 gint main(gint argc,
           gchar *argv[]) {
+    GOptionContext *main_context =
+        g_option_context_new("<event_log> replay PS/2 devices");
     GIOChannel *input_channel,
                *ps2emu_channel;
     GIOStatus rc;
     GError *error = NULL;
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage: ps2emu-replay <event_log>\n");
-        return 1;
-    }
+    GOptionEntry options[] = {
+        { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
+          print_version, NULL },
+        { 0 }
+    };
+
+    g_option_context_add_main_entries(main_context, options, NULL);
+    g_option_context_set_help_enabled(main_context, TRUE);
+    g_option_context_set_description(main_context,
+        "Replays a PS/2 device using any log created with ps2emu-record\n");
+
+    if (!g_option_context_parse(main_context, &argc, &argv, &error))
+        exit_on_bad_argument(main_context, TRUE, error->message);
+
+    if (argc < 2)
+        exit_on_bad_argument(main_context, FALSE,
+                             "No filename specified! Use --help for more "
+                             "information");
 
     input_channel = g_io_channel_new_file(argv[1], "r", &error);
     if (!input_channel) {
