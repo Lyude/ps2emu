@@ -516,6 +516,9 @@ int main(int argc, char *argv[]) {
           "Enable recording of the AUX (auxillary, usually the port used for "
           "cursor devices) port, enabled by default",
           "<yes|no>" },
+        { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
+          print_version,
+          "Show the version of the application", NULL },
         { 0 }
     };
 

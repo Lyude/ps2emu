@@ -28,6 +28,12 @@ typedef enum {
     PS2_ERROR_NO_EVENTS
 } PS2Error;
 
+gboolean print_version(const gchar *option_name,
+                       const gchar *value,
+                       gpointer data,
+                       GError **error)
+G_GNUC_NORETURN;
+
 static inline void exit_on_bad_argument(GOptionContext *option_context,
                                         gboolean print_help,
                                         const gchar *format,
