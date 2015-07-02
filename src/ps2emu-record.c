@@ -37,6 +37,8 @@ typedef struct {
 
 static gboolean record_kbd;
 static gboolean record_aux;
+static gchar *output_file = "ps2emu_record.txt";
+static GIOChannel *output_channel;
 
 static gint64 start_time = 0;
 static time_t dmesg_start_time = 0;
@@ -210,10 +212,12 @@ fail:
     return rc;
 }
 
-static void process_event(PS2Event *event,
-                          time_t time) {
+static GIOStatus process_event(PS2Event *event,
+                               time_t time,
+                               GError **error) {
     static gboolean ignoring_events = FALSE;
     gchar *event_str = NULL;
+    GIOStatus rc;
 
     /* Any commands that we receive with any of the port numbers are just part
      * of the i8042 probing, and can't be forwarded over serio in the relay
@@ -224,7 +228,7 @@ static void process_event(PS2Event *event,
             g_hash_table_contains(ports, GUINT_TO_POINTER(event->data))) {
 
             ignoring_events = TRUE;
-            return;
+            return G_IO_STATUS_NORMAL;
         }
     }
     else {
@@ -234,14 +238,14 @@ static void process_event(PS2Event *event,
             ignoring_events = FALSE;
         }
         else
-            return;
+            return G_IO_STATUS_NORMAL;
     }
 
     /* Filter out all commands that have made it to this point. With i8042's
      * debug output, commands just mark the recepient of the message which we
      * don't need (with the AUX port anyway), and can't use with serio */
     if (event->type == PS2_EVENT_TYPE_COMMAND)
-        return;
+        return G_IO_STATUS_NORMAL;
 
     /* The logic here is that we can only get two types of events from a
      * keyboard, kbd-data and interrupt. No other device sends kbd-data, so we
@@ -252,30 +256,30 @@ static void process_event(PS2Event *event,
     if (!record_kbd) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT &&
             event->origin == PS2_EVENT_ORIGIN_KEYBOARD)
-            return;
+            return G_IO_STATUS_NORMAL;
 
         if (event->type == PS2_EVENT_TYPE_KBD_DATA)
-            return;
+            return G_IO_STATUS_NORMAL;
     }
 
     if (!record_aux) {
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
             if (event->origin == PS2_EVENT_ORIGIN_AUX)
-                return;
+                return G_IO_STATUS_NORMAL;
         }
         else if (event->type != PS2_EVENT_TYPE_KBD_DATA)
-            return;
+            return G_IO_STATUS_NORMAL;
     }
 
     if (!dmesg_start_time)
         dmesg_start_time = time;
 
     event_str = ps2_event_to_string(event, time - dmesg_start_time);
-    printf("%s\n", event_str);
+    rc = g_io_channel_write_chars(output_channel, event_str, -1, NULL, error);
 
     g_free(event_str);
 
-    return;
+    return rc;
 }
 
 static gboolean write_to_char_dev(const gchar *cdev,
@@ -461,7 +465,10 @@ static gboolean record(GError **error) {
     if (!input_channel)
         return FALSE;
 
-    printf("# ps2emu-record V0\n");
+    rc = g_io_channel_write_chars(output_channel, "# ps2emu-record V0\n", -1,
+                                  NULL, error);
+    if (rc != G_IO_STATUS_NORMAL)
+        return FALSE;
 
     /* If we're not reading from a log and we put the devices into debug mode
      * ourselves, find the spot in the kernel log to begin to read from */
@@ -482,8 +489,12 @@ static gboolean record(GError **error) {
 
     while ((rc = parse_next_message(input_channel, &res, error)) ==
            G_IO_STATUS_NORMAL) {
-        if (res.type == I8042_OUTPUT)
-            process_event(&res.event, res.dmesg_time);
+        if (res.type != I8042_OUTPUT)
+            continue;
+
+        rc = process_event(&res.event, res.dmesg_time, error);
+        if (rc != G_IO_STATUS_NORMAL)
+            return FALSE;
     }
 
     return TRUE;
@@ -491,7 +502,7 @@ static gboolean record(GError **error) {
 
 int main(int argc, char *argv[]) {
     GOptionContext *main_context =
-        g_option_context_new("record PS/2 devices");
+        g_option_context_new("[output_file] record PS/2 devices");
     gboolean rc;
     GError *error = NULL;
     gchar *record_kbd_str = NULL,
@@ -528,6 +539,16 @@ int main(int argc, char *argv[]) {
     if (!rc) {
         exit_on_bad_argument(main_context, TRUE,
             "Invalid options: %s", error->message);
+    }
+
+    if (argc > 1)
+        output_file = argv[1];
+
+    output_channel = g_io_channel_new_file(output_file, "w+", &error);
+    if (!output_channel) {
+        fprintf(stderr, "Couldn't open `%s`: %s\n", output_file,
+                error->message);
+        exit(1);
     }
 
     /* Don't record the keyboard if the user didn't explicitly enable it */
