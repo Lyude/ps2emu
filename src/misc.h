@@ -21,6 +21,7 @@
 #include <glib.h>
 
 #define PS2EMU_ERROR (g_quark_from_static_string("ps2emu-error"))
+#define PS2EMU_LOG_VERSION 0
 
 typedef enum {
     PS2_ERROR_INPUT,

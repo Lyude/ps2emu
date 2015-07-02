@@ -465,7 +465,9 @@ static gboolean record(GError **error) {
     if (!input_channel)
         return FALSE;
 
-    rc = g_io_channel_write_chars(output_channel, "# ps2emu-record V0\n", -1,
+    rc = g_io_channel_write_chars(output_channel,
+                                  "# ps2emu-record V"
+                                  G_STRINGIFY(PS2EMU_LOG_VERSION) " \n", -1,
                                   NULL, error);
     if (rc != G_IO_STATUS_NORMAL)
         return FALSE;
