@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
+#include <errno.h>
 #include <linux/serio.h>
 #include <ps2emu.h>
 
@@ -105,6 +106,39 @@ static gboolean parse_events(GIOChannel *input_channel,
     return TRUE;
 }
 
+static int parse_log_version(GIOChannel *input_channel,
+                             GError **error) {
+    gchar *line = NULL;
+    int log_version,
+        parse_count;
+    GIOStatus rc;
+
+    rc = g_io_channel_read_line(input_channel, &line, NULL, NULL, error);
+    if (rc != G_IO_STATUS_NORMAL) {
+        if (rc == G_IO_STATUS_EOF) {
+            g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
+                                "Reached unexpected EOF");
+        }
+
+        goto error;
+    }
+
+    errno = 0;
+    parse_count = sscanf(line, "# ps2emu-record V%d\n", &log_version);
+    if (parse_count == 0 || errno != 0) {
+        g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+                            "Invalid log file version");
+        goto error;
+    }
+
+    g_free(line);
+    return log_version;
+
+error:
+    g_free(line);
+    return -1;
+}
+
 gint main(gint argc,
           gchar *argv[]) {
     GOptionContext *main_context =
@@ -112,6 +146,7 @@ gint main(gint argc,
     GIOChannel *input_channel,
                *ps2emu_channel;
     GIOStatus rc;
+    int log_version;
     GError *error = NULL;
 
     GOptionEntry options[] = {
@@ -138,6 +173,10 @@ gint main(gint argc,
         g_prefix_error(&error, "While opening %s: ", argv[1]);
         goto error;
     }
+
+    log_version = parse_log_version(input_channel, &error);
+    if (log_version < 0)
+        goto error;
 
     if (!parse_events(input_channel, &error))
         goto error;
