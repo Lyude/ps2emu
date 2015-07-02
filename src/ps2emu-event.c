@@ -14,7 +14,7 @@
  */
 
 #include "ps2emu-event.h"
-#include "misc.h"
+#include "ps2emu-misc.h"
 
 #include <stdio.h>
 #include <string.h>

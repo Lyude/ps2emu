@@ -21,7 +21,7 @@
 #include <glib.h>
 #include <signal.h>
 
-#include "misc.h"
+#include "ps2emu-misc.h"
 #include "ps2emu-event.h"
 
 typedef struct {
