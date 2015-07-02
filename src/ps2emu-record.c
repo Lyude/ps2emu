@@ -108,7 +108,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
 
         type_str_argc = g_strv_length(type_str_args);
         if (type_str_argc < 3) {
-            g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+            g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                         "Got interrupt event, but had less arguments then "
                         "expected");
             goto error;
@@ -117,7 +117,7 @@ static gboolean parse_normal_event(const gchar *start_pos,
         errno = 0;
         port = strtol(type_str_args[1], NULL, 10);
         if (errno != 0) {
-            g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+            g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                         "Failed to parse port number from interrupt event: "
                         "%s\n",
                         strerror(errno));
@@ -198,7 +198,7 @@ static GIOStatus parse_next_message(GIOChannel *input_channel,
     errno = 0;
     parsed_count = sscanf(current_line, "%*d,%*d,%ld", &res->dmesg_time);
     if (parsed_count != 1 || errno != 0) {
-        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                     "Invalid/no time value received: %s", strerror(errno));
 
         rc = G_IO_STATUS_ERROR;
@@ -480,7 +480,7 @@ static gboolean record(GError **error) {
             break;
     }
     if (rc != G_IO_STATUS_NORMAL) {
-        g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
+        g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_NO_EVENTS,
                             "Reached EOF of /dev/kmsg and got no events");
         return FALSE;
     }

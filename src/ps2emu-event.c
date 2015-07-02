@@ -71,7 +71,7 @@ PS2Event * ps2_event_from_line(const gchar *str,
                           &new_event->time, &origin_char, &direction_char,
                           &new_event->data);
     if (errno != 0 || parsed_count != 4) {
-        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                     "Invalid event line '%s'", str);
         goto error;
     }
@@ -81,7 +81,7 @@ PS2Event * ps2_event_from_line(const gchar *str,
     else if (origin_char == 'A')
         new_event->origin = PS2_EVENT_ORIGIN_AUX;
     else {
-        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                     "Invalid event origin '%c' from '%s'", origin_char, str);
         goto error;
     }
@@ -92,7 +92,7 @@ PS2Event * ps2_event_from_line(const gchar *str,
     else if (direction_char == 'R')
         new_event->type = PS2_EVENT_TYPE_INTERRUPT;
     else {
-        g_set_error(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                     "Invalid event direction '%c' from '%s'",
                     direction_char, str);
         goto error;

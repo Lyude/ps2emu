@@ -24,8 +24,8 @@
 #define PS2EMU_LOG_VERSION 0
 
 typedef enum {
-    PS2_ERROR_INPUT,
-    PS2_ERROR_NO_EVENTS
+    PS2EMU_ERROR_INPUT,
+    PS2EMU_ERROR_NO_EVENTS
 } PS2Error;
 
 gboolean print_version(const gchar *option_name,

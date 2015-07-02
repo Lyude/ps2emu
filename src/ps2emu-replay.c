@@ -116,7 +116,7 @@ static int parse_log_version(GIOChannel *input_channel,
     rc = g_io_channel_read_line(input_channel, &line, NULL, NULL, error);
     if (rc != G_IO_STATUS_NORMAL) {
         if (rc == G_IO_STATUS_EOF) {
-            g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_NO_EVENTS,
+            g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_NO_EVENTS,
                                 "Reached unexpected EOF");
         }
 
@@ -126,7 +126,7 @@ static int parse_log_version(GIOChannel *input_channel,
     errno = 0;
     parse_count = sscanf(line, "# ps2emu-record V%d\n", &log_version);
     if (parse_count == 0 || errno != 0) {
-        g_set_error_literal(error, PS2EMU_ERROR, PS2_ERROR_INPUT,
+        g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                             "Invalid log file version");
         goto error;
     }
