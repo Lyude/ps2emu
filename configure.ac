@@ -1,4 +1,4 @@
-AC_INIT([ps2emu], [0.0], [cpaul@redhat.com], [ps2emu])
+AC_INIT([ps2emu], [0.0], [thatslyude@gmail.com], [ps2emu])
 AM_INIT_AUTOMAKE([foreign -Wall])
 
 # Check for programs
