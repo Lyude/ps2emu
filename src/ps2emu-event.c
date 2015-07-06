@@ -46,7 +46,7 @@ gchar * ps2_event_to_string(PS2Event *event,
     comment = g_strdup(strstr(event->original_line, "("));
     g_strchomp(comment);
 
-    event_str = g_strdup_printf("%-10ld %c %c %.2hhx # %s\n",
+    event_str = g_strdup_printf("E: %-10ld %c %c %.2hhx # %s\n",
                                 time, origin, direction, event->data, comment);
     g_free(comment);
 

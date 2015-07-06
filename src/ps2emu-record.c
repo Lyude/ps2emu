@@ -21,6 +21,7 @@
 #include <glib.h>
 #include <signal.h>
 
+#include "ps2emu-section.h"
 #include "ps2emu-misc.h"
 #include "ps2emu-event.h"
 
@@ -47,6 +48,8 @@ static GHashTable *ports;
 
 #define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
 #define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
+
+#define PS2EMU_INIT_TIMEOUT_SECS 5
 
 static GIOStatus get_next_module_line(GIOChannel *input_channel,
                                       GQuark *match,
@@ -364,9 +367,13 @@ next:
     return TRUE;
 }
 
-static void disable_i8042_debugging() {
+static inline void disable_i8042_debugging() {
     g_warn_if_fail(write_to_char_dev("/sys/module/i8042/parameters/debug",
                                      NULL, "0\n"));
+}
+
+static void exit_on_interrupt() {
+    disable_i8042_debugging();
 
     exit(0);
 }
@@ -442,7 +449,7 @@ static gboolean enable_i8042_debugging(GError **error) {
 
     /* Disable debugging when this application quits */
     memset(&sigaction_struct, 0, sizeof(sigaction_struct));
-    sigaction_struct.sa_handler = disable_i8042_debugging;
+    sigaction_struct.sa_handler = exit_on_interrupt;
 
     g_warn_if_fail(sigaction(SIGINT, &sigaction_struct, NULL) == 0);
     g_warn_if_fail(sigaction(SIGTERM, &sigaction_struct, NULL) == 0);
@@ -457,18 +464,86 @@ error:
     return FALSE;
 }
 
+typedef struct {
+    time_t last_check_time;
+    time_t *last_event_time;
+} InitTimeoutCheckerArgs;
+
+gboolean init_timeout_checker(void *data) {
+    InitTimeoutCheckerArgs *args = data;
+
+    if ((*args->last_event_time - args->last_check_time) / G_USEC_PER_SEC <
+        PS2EMU_INIT_TIMEOUT_SECS)
+        return G_SOURCE_CONTINUE;
+
+    dmesg_start_time = 0;
+
+    /* We can just rely on the main recording function failing if this
+     * happens to fail */
+    g_io_channel_write_chars(output_channel, "S: Main\n", -1, NULL, NULL);
+    g_io_channel_flush(output_channel, NULL);
+
+    printf("The first stage of the recording has completed, you may now use "
+           "your computer normally.\n");
+
+    return G_SOURCE_REMOVE;
+}
+
+typedef struct {
+    LogMsgParseResult *res;
+    gboolean *ret;
+    GError **error;
+} DmesgEventHandlerArgs;
+
+static gboolean dmesg_event_handler(GIOChannel *source,
+                                    GIOCondition condition,
+                                    void *data) {
+    DmesgEventHandlerArgs *args = data;
+    GIOStatus rc;
+
+    switch (condition) {
+        case G_IO_IN:
+            while ((rc = parse_next_message(source, args->res, args->error)) ==
+                   G_IO_STATUS_NORMAL) {
+                if (args->res->type != I8042_OUTPUT)
+                    continue;
+
+                rc = process_event(&args->res->event, args->res->dmesg_time,
+                                   args->error);
+                if (rc != G_IO_STATUS_NORMAL)
+                    goto error;
+            }
+            if (rc != G_IO_STATUS_AGAIN)
+                goto error;
+
+            break;
+        default:
+            break;
+    }
+
+    return TRUE;
+
+error:
+    *args->ret = FALSE;
+    return FALSE;
+}
+
 static gboolean record(GError **error) {
     GIOChannel *input_channel = g_io_channel_new_file("/dev/kmsg", "r", error);
     LogMsgParseResult res;
+    InitTimeoutCheckerArgs timeout_checker_args;
+    DmesgEventHandlerArgs dmesg_event_handler_args;
     GIOStatus rc;
+    gboolean ret = TRUE;
 
     if (!input_channel)
         return FALSE;
 
     rc = g_io_channel_write_chars(output_channel,
                                   "# ps2emu-record V"
-                                  G_STRINGIFY(PS2EMU_LOG_VERSION) " \n", -1,
-                                  NULL, error);
+                                  G_STRINGIFY(PS2EMU_LOG_VERSION) " \n"
+                                  "S: Init\n",
+                                  -1, NULL, error);
     if (rc != G_IO_STATUS_NORMAL)
         return FALSE;
 
@@ -485,17 +560,29 @@ static gboolean record(GError **error) {
         return FALSE;
     }
 
-    while ((rc = parse_next_message(input_channel, &res, error)) ==
-           G_IO_STATUS_NORMAL) {
-        if (res.type != I8042_OUTPUT)
-            continue;
+    rc = g_io_channel_set_flags(input_channel, G_IO_FLAG_NONBLOCK, error);
+    if (rc != G_IO_STATUS_NORMAL)
+        return FALSE;
 
-        rc = process_event(&res.event, res.dmesg_time, error);
-        if (rc != G_IO_STATUS_NORMAL)
-            return FALSE;
-    }
+    dmesg_event_handler_args = (DmesgEventHandlerArgs) {
+        .res = &res,
+        .error = error,
+        .ret = &ret,
+    };
+    g_io_add_watch(input_channel, G_IO_IN | G_IO_ERR | G_IO_HUP,
+                   dmesg_event_handler, &dmesg_event_handler_args);
 
-    return TRUE;
+    timeout_checker_args = (InitTimeoutCheckerArgs) {
+        .last_check_time = g_get_monotonic_time() - start_time,
+        .last_event_time = &res.dmesg_time,
+    };
+    g_timeout_add_seconds_full(G_PRIORITY_HIGH, PS2EMU_INIT_TIMEOUT_SECS,
+                               init_timeout_checker, &timeout_checker_args,
+                               NULL);
+
+    g_main_loop_run(g_main_loop_new(NULL, FALSE));
+
+    return ret;
 }
 
 int main(int argc, char *argv[]) {
@@ -583,6 +670,18 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    printf("====== ATTENTION! ======\n"
+           "ps2emu-record will soon start recording your device. During the\n"
+           "first stage of this recording, it is VERY IMPORTANT that you do\n"
+           "not at all touch your mouse or keyboard. Doing so may potentially\n"
+           "contaminate the recording. This first stage only lasts a couple\n"
+           "of seconds at most, and ps2emu-record will notify you when it is\n"
+           "okay to touch your mouse and/or keyboard again.\n"
+           "Press any key to continue...\n");
+    getchar();
+    printf("Recording has started, please don't touch your mouse or "
+           "keyboard...\n");
+
     if (!enable_i8042_debugging(&error)) {
         fprintf(stderr,
                 "Failed to enable i8042 debugging: %s\n",
@@ -593,6 +692,7 @@ int main(int argc, char *argv[]) {
     g_option_context_free(main_context);
 
     rc = record(&error);
+    disable_i8042_debugging();
     if (!rc) {
         fprintf(stderr, "Error: %s\n",
                 error->message);
