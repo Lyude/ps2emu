@@ -275,7 +275,7 @@ gint main(gint argc,
         goto error;
     }
 
-    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_BEGIN, SERIO_8042, &error);
+    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_BEGIN, 0, &error);
     if (rc != G_IO_STATUS_NORMAL) {
         g_prefix_error(&error, "While starting device on /dev/ps2emu: ");
         goto error;
