@@ -21,6 +21,10 @@
 #include <errno.h>
 #include <glib.h>
 
+void ps2_event_free(PS2Event *event) {
+    g_slice_free(PS2Event, event);
+}
+
 gchar * ps2_event_to_string(PS2Event *event,
                             time_t time) {
     gchar *event_str,
@@ -102,7 +106,7 @@ PS2Event * ps2_event_from_line(const gchar *str,
 
 error:
     if (new_event)
-        g_slice_free(PS2Event, new_event);
+        ps2_event_free(new_event);
 
     return NULL;
 }
