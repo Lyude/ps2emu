@@ -56,6 +56,7 @@ gchar * ps2_event_to_string(PS2Event *event,
 PS2Event * ps2_event_from_line(const gchar *str,
                                GError **error) {
     gchar const *str_start = &str[strspn(str, " \t")];
+    gchar *str_stripped;
     int parsed_count;
     char origin_char,
          direction_char;
@@ -63,6 +64,17 @@ PS2Event * ps2_event_from_line(const gchar *str,
 
     if (*str_start == '#')
         return FALSE;
+
+    /* Skip the line if it's blank */
+    str_stripped = g_strdup(str_start);
+    g_strstrip(str_stripped);
+
+    if (strcmp(str_stripped, "") == 0) {
+        g_free(str_stripped);
+        return NULL;
+    }
+
+    g_free(str_stripped);
 
     new_event = g_slice_alloc(sizeof(PS2Event));
 
