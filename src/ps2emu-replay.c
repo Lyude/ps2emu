@@ -49,6 +49,11 @@ static gboolean replay(GIOChannel *ps2emu_channel,
     for (GSList *l = event_list; l != NULL; l = l->next) {
         event = l->data;
 
+        /* Skip keyboard events right now, we can't really play them back
+         * properly */
+        if (event->origin == PS2_EVENT_ORIGIN_KEYBOARD)
+            continue;
+
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
             time_t current_time;
 
@@ -158,7 +163,9 @@ gint main(gint argc,
     g_option_context_add_main_entries(main_context, options, NULL);
     g_option_context_set_help_enabled(main_context, TRUE);
     g_option_context_set_description(main_context,
-        "Replays a PS/2 device using any log created with ps2emu-record\n");
+        "Replays a PS/2 device using any log created with ps2emu-record\n"
+        "It should be noted that at the time of writing this, we currently \n"
+        "do not support replaying keyboard devices.\n");
 
     if (!g_option_context_parse(main_context, &argc, &argv, &error))
         exit_on_bad_argument(main_context, TRUE, error->message);
