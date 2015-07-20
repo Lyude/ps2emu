@@ -1,0 +1,55 @@
+.TH PS2EMU-RECORD 1 "ps2emu-record __version__"
+.SH NAME
+ps2emu-record \- an application to record a PS/2 device for later playback
+.SH SYNOPSIS
+.B ps2emu-record \fR[\fIoptions\fR] <\fIoutput_file\fR>
+.
+.\"*****************************************************************************
+.SH DESCRIPTION
+.
+\fBps2emu-record\fR is an application for recording all of the data going in and
+out of a PS/2 device, so that it may later be replayed as a virtual device on
+another person's system. The purpose of this tool is mainly to allow developers
+to fix bugs on a device that need to be traced down to the PS/2 level, without
+the developers having to actually have the physical device in front of them.
+Logs created with \fBps2emu-record\fR can be replayed with the \fBps2emu\fR
+kernel module in combination with the \fBps2emu-replay\fR program.
+.
+.\"*****************************************************************************
+.SH OPTIONS
+.
+.SS
+.TP
+.BR \-h\fR,\ \fB\-\-help
+Print a summary of command line options, and quit.
+.TP
+.BR \-V\fR,\ \fB\-\-version
+Print the version of ps2emu-record, and quit.
+.TP
+.BR \-t\fR,\ \fB\-\-target\fR=<\fIKBD\fR|\fIAUX\fR>
+Set the target port to record. This is either \fIKBD\fR, or \fIAUX\fR. \fIKBD\fR
+is usually the port where the keyboard attached, and \fIAUX\fR is usually the
+port where everything else (including mice and touchpads). If you need to record
+the keyboard, please read the \fBSECURITY\fR section of this man page first.
+.
+.\"*****************************************************************************
+.SH SECURITY
+.
+Because \fBps2emu-record\fR records all of the PS/2 data coming in and out of a
+device, this means that it can also log all of the keypresses going through a
+keyboard. For this reason, recording the keyboard is turned off by default and
+must be explicitly enabled by the user. Care should still be taken not to type
+passwords or sensitive information while \fBps2emu-record\fR is running however,
+due to the fact that ps2emu-record relies on the i8042 debugging option that
+dumps all of the PS/2 data to the kernel log, in order to read the PS/2 data
+going in and out of a device. As such, even when \fBps2emu-record\fR is not
+recording the keyboard, data coming in and out of the keyboard is still being
+printed to the kernel log (although it is actively being ignored by the
+recorder). This debugging information is turned off when \fBps2emu-record\fR
+finishes, so it is safe to type sensitive information once you have ended
+\fBps2emu-record\fR.
+.\"*****************************************************************************
+.SH "SEE ALSO"
+.
+.BR ps2emu-replay (1)
+.\" vim: set ft=groff :

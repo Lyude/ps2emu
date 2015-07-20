@@ -1,0 +1,52 @@
+.TH PS2EMU-REPLAY 1 "ps2emu-replay __version__"
+.SH NAME
+ps2emu-replay \- an application to replay a PS/2 device using the ps2emu kernel
+module
+.SH SYNOPSIS
+.B ps2emu-replay \fR[\fI\-hV\fR] <\fIrecording\fR>
+.
+.\"*****************************************************************************
+.SH DESCRIPTION
+.
+\fBps2emu-replay\fR is an application that emulates a PS/2 device by replaying
+all of the events found in a recording created by \fBps2emu-record\fR. Because
+it's not feasible for us to emulate a fully functional device, the device
+created by \fBps2emu-replay\fR simply plays back all of the events in the log,
+and will simply not respond to a device driver that sends data that wasn't
+originally in the log. This means event logs may not work between kernel
+versions if the behavior of the PS/2 device driver in question has changed.
+
+In order for \fBps2emu-replay\fR to be able to replay a PS/2 device, the
+\fBps2emu\fR kernel module must be loaded and the program must have access to
+the /dev/ps2emu device.
+.
+.\"*****************************************************************************
+.SH OPTIONS
+.
+.SS
+.TP
+.BR \-h\fR,\ \fB\-\-help
+Print a summary of command line options, and quit.
+.TP
+.BR \-V\fR,\ \fB\-\-version
+Print the version of ps2emu-record, and quit.
+.TP
+.BR \-\-no\-events
+Don't replay any of the actual input events from the device, just create the
+device with the initialization sequence in the log.
+.TP
+.BR \-\-keep\-running
+Don't exit immediately after playing the recording, keep running until we
+receive a keyboard interrupt, or anything else that would kill the process.
+.TP
+.BR \-w\fR,\ \fB\-\-max-wait=\fIn\fR
+Don't wait any longer then \fIn\fR seconds between events. This helps in
+situations where the recorded event log is very long, and there happen to be
+long gaps between each set of events so that the developer doesn't need to wait
+each time.
+.
+.\"*****************************************************************************
+.SH "SEE ALSO"
+.
+.BR ps2emu-record (1)
+.\" vim: set ft=groff :
