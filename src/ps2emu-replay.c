@@ -49,12 +49,13 @@ static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
 
 static gboolean simulate_interrupt(GIOChannel *userio_channel,
                                    time_t start_time,
+                                   time_t skip_offset,
                                    PS2Event *event,
                                    GError **error) {
     time_t current_time;
     GIOStatus rc;
 
-    current_time = g_get_monotonic_time() - start_time;
+    current_time = g_get_monotonic_time() - start_time + skip_offset;
     if (current_time < event->time)
         g_usleep(event->time - current_time);
 
@@ -89,16 +90,27 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
 
 static gboolean replay_event_list(GIOChannel *userio_channel,
                                   GList *event_list,
+                                  time_t max_wait,
                                   GError **error) {
     PS2Event *event;
     const time_t start_time = g_get_monotonic_time();
+    time_t skip_offset = 0;
 
     for (GList *l = event_list; l != NULL; l = l->next) {
         event = l->data;
 
+        if (max_wait && l->prev) {
+            PS2Event *last_event = l->prev->data;
+            time_t wait_time = event->time - last_event->time;
+
+            /* If necessary, time-travel to the future */
+            if (wait_time > max_wait)
+                skip_offset += wait_time - max_wait;
+        }
+
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-            if (!simulate_interrupt(userio_channel, start_time, event,
-                                    error))
+            if (!simulate_interrupt(userio_channel, start_time, skip_offset,
+                                    event, error))
                 return FALSE;
         } else {
             if (!simulate_receive(userio_channel, event, error))
@@ -215,6 +227,7 @@ gint main(gint argc,
                *userio_channel;
     GIOStatus rc;
     int log_version;
+    time_t max_wait = 0;
     GError *error = NULL;
     gboolean no_events = FALSE,
              keep_running = FALSE;
@@ -226,6 +239,9 @@ gint main(gint argc,
           &no_events, "Don't replay events, just initialize the device", NULL },
         { "keep-running", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
           &keep_running, "Don't exit immediately after replay finishes", NULL },
+        { "max-wait", 'w', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT,
+          &max_wait, "Don't wait for longer then n seconds between events",
+          "n", },
         { 0 }
     };
 
@@ -241,6 +257,8 @@ gint main(gint argc,
         exit_on_bad_argument(main_context, FALSE,
                              "No filename specified! Use --help for more "
                              "information");
+
+    max_wait *= G_USEC_PER_SEC;
 
     input_channel = g_io_channel_new_file(argv[1], "r", &error);
     if (!input_channel) {
@@ -288,11 +306,11 @@ gint main(gint argc,
     }
 
     if (log_version == 0) {
-        if (!replay_event_list(userio_channel, event_list, &error))
+        if (!replay_event_list(userio_channel, event_list, FALSE, &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_event_list(userio_channel, init_event_list, &error))
+        if (!replay_event_list(userio_channel, init_event_list, FALSE, &error))
             goto error;
 
         if (!no_events) {
@@ -300,7 +318,8 @@ gint main(gint argc,
             g_usleep(500000);
 
             printf("Replaying event sequence...\n");
-            if (!replay_event_list(userio_channel, main_event_list, &error))
+            if (!replay_event_list(userio_channel, main_event_list, max_wait,
+                                   &error))
                 goto error;
         }
 
