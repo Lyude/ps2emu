@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <glib.h>
 #include <errno.h>
@@ -215,13 +216,16 @@ gint main(gint argc,
     GIOStatus rc;
     int log_version;
     GError *error = NULL;
-    gboolean no_events = FALSE;
+    gboolean no_events = FALSE,
+             keep_running = FALSE;
 
     GOptionEntry options[] = {
         { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           print_version, "Show the version of the application", NULL },
         { "no-events", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
           &no_events, "Don't replay events, just initialize the device", NULL },
+        { "keep-running", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
+          &keep_running, "Don't exit immediately after replay finishes", NULL },
         { 0 }
     };
 
@@ -299,6 +303,9 @@ gint main(gint argc,
             if (!replay_event_list(userio_channel, main_event_list, &error))
                 goto error;
         }
+
+        if (keep_running)
+            pause();
     }
 
     return 0;
