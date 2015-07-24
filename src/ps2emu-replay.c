@@ -90,7 +90,6 @@ static gboolean replay_event_list(GIOChannel *userio_channel,
                                   GSList *event_list,
                                   GError **error) {
     PS2Event *event;
-    GIOStatus rc;
     const time_t start_time = g_get_monotonic_time();
 
     for (GSList *l = event_list; l != NULL; l = l->next) {
