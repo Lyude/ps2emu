@@ -24,29 +24,29 @@
 #include <glib.h>
 #include <errno.h>
 #include <linux/serio.h>
-#include <ps2emu.h>
+#include <userio.h>
 
 static GSList *event_list;
 
 static GSList *init_event_list;
 static GSList *main_event_list;
 
-static GIOStatus send_ps2emu_cmd(GIOChannel *ps2emu_channel,
+static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
                                  guint8 data,
                                  GError **error) {
     GIOStatus rc;
-    struct ps2emu_cmd cmd = {
+    struct userio_cmd cmd = {
         .type = type,
         .data = data,
     };
 
-    rc = g_io_channel_write_chars(ps2emu_channel, (gchar*)&cmd, sizeof(cmd),
+    rc = g_io_channel_write_chars(userio_channel, (gchar*)&cmd, sizeof(cmd),
                                   NULL, error);
     return rc;
 }
 
-static gboolean simulate_interrupt(GIOChannel *ps2emu_channel,
+static gboolean simulate_interrupt(GIOChannel *userio_channel,
                                    time_t start_time,
                                    PS2Event *event,
                                    GError **error) {
@@ -57,7 +57,7 @@ static gboolean simulate_interrupt(GIOChannel *ps2emu_channel,
     if (current_time < event->time)
         g_usleep(event->time - current_time);
 
-    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_SEND_INTERRUPT,
+    rc = send_userio_cmd(userio_channel, USERIO_CMD_SEND_INTERRUPT,
                          event->data, error);
     if (rc != G_IO_STATUS_NORMAL)
         return FALSE;
@@ -65,14 +65,14 @@ static gboolean simulate_interrupt(GIOChannel *ps2emu_channel,
     return TRUE;
 }
 
-static gboolean simulate_receive(GIOChannel *ps2emu_channel,
+static gboolean simulate_receive(GIOChannel *userio_channel,
                                  PS2Event *event,
                                  GError **error) {
     guchar data;
     gsize count;
     GIOStatus rc;
 
-    rc = g_io_channel_read_chars(ps2emu_channel, (gchar*)&data,
+    rc = g_io_channel_read_chars(userio_channel, (gchar*)&data,
                                  sizeof(event->data), &count, error);
 
     if (rc != G_IO_STATUS_NORMAL)
@@ -86,7 +86,7 @@ static gboolean simulate_receive(GIOChannel *ps2emu_channel,
     return TRUE;
 }
 
-static gboolean replay_event_list(GIOChannel *ps2emu_channel,
+static gboolean replay_event_list(GIOChannel *userio_channel,
                                   GSList *event_list,
                                   GError **error) {
     PS2Event *event;
@@ -97,11 +97,11 @@ static gboolean replay_event_list(GIOChannel *ps2emu_channel,
         event = l->data;
 
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-            if (!simulate_interrupt(ps2emu_channel, start_time, event,
+            if (!simulate_interrupt(userio_channel, start_time, event,
                                     error))
                 return FALSE;
         } else {
-            if (!simulate_receive(ps2emu_channel, event, error))
+            if (!simulate_receive(userio_channel, event, error))
                 return FALSE;
         }
     }
@@ -212,7 +212,7 @@ gint main(gint argc,
     GOptionContext *main_context =
         g_option_context_new("<event_log> - replay PS/2 devices");
     GIOChannel *input_channel,
-               *ps2emu_channel;
+               *userio_channel;
     GIOStatus rc;
     int log_version;
     GError *error = NULL;
@@ -255,42 +255,42 @@ gint main(gint argc,
 
     g_io_channel_unref(input_channel);
 
-    ps2emu_channel = g_io_channel_new_file("/dev/ps2emu", "r+", &error);
-    if (!ps2emu_channel) {
-        g_prefix_error(&error, "While opening /dev/ps2emu: ");
+    userio_channel = g_io_channel_new_file("/dev/userio", "r+", &error);
+    if (!userio_channel) {
+        g_prefix_error(&error, "While opening /dev/userio: ");
         goto error;
     }
 
-    rc = g_io_channel_set_encoding(ps2emu_channel, NULL, &error);
+    rc = g_io_channel_set_encoding(userio_channel, NULL, &error);
     if (rc != G_IO_STATUS_NORMAL) {
-        g_prefix_error(&error, "While opening /dev/ps2emu: ");
+        g_prefix_error(&error, "While opening /dev/userio: ");
         goto error;
     }
-    g_io_channel_set_buffered(ps2emu_channel, FALSE);
+    g_io_channel_set_buffered(userio_channel, FALSE);
 
-    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_SET_PORT_TYPE, SERIO_8042,
+    rc = send_userio_cmd(userio_channel, USERIO_CMD_SET_PORT_TYPE, SERIO_8042,
                          &error);
     if (rc != G_IO_STATUS_NORMAL) {
-        g_prefix_error(&error, "While setting port type on /dev/ps2emu: ");
+        g_prefix_error(&error, "While setting port type on /dev/userio: ");
         goto error;
     }
 
-    rc = send_ps2emu_cmd(ps2emu_channel, PS2EMU_CMD_BEGIN, 0, &error);
+    rc = send_userio_cmd(userio_channel, USERIO_CMD_REGISTER, 0, &error);
     if (rc != G_IO_STATUS_NORMAL) {
-        g_prefix_error(&error, "While starting device on /dev/ps2emu: ");
+        g_prefix_error(&error, "While starting device on /dev/userio: ");
         goto error;
     }
 
     if (log_version == 0) {
-        if (!replay_event_list(ps2emu_channel, event_list, &error))
+        if (!replay_event_list(userio_channel, event_list, &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_event_list(ps2emu_channel, init_event_list, &error))
+        if (!replay_event_list(userio_channel, init_event_list, &error))
             goto error;
 
         printf("Replaying event sequence...\n");
-        if (!replay_event_list(ps2emu_channel, main_event_list, &error))
+        if (!replay_event_list(userio_channel, main_event_list, &error))
             goto error;
     }
 
