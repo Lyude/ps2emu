@@ -289,6 +289,9 @@ gint main(gint argc,
         if (!replay_event_list(userio_channel, init_event_list, &error))
             goto error;
 
+        /* Sleep for half a second so we don't throw the driver out of sync */
+        g_usleep(500000);
+
         printf("Replaying event sequence...\n");
         if (!replay_event_list(userio_channel, main_event_list, &error))
             goto error;
