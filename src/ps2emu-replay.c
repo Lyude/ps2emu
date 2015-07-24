@@ -27,10 +27,10 @@
 #include <linux/serio.h>
 #include <userio.h>
 
-static GSList *event_list;
+static GList *event_list;
 
-static GSList *init_event_list;
-static GSList *main_event_list;
+static GList *init_event_list;
+static GList *main_event_list;
 
 static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
@@ -88,12 +88,12 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
 }
 
 static gboolean replay_event_list(GIOChannel *userio_channel,
-                                  GSList *event_list,
+                                  GList *event_list,
                                   GError **error) {
     PS2Event *event;
     const time_t start_time = g_get_monotonic_time();
 
-    for (GSList *l = event_list; l != NULL; l = l->next) {
+    for (GList *l = event_list; l != NULL; l = l->next) {
         event = l->data;
 
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
@@ -117,7 +117,7 @@ static gboolean parse_events(GIOChannel *input_channel,
     PS2Event *event;
     LogSectionType section_type;
     gchar *msg_start;
-    GSList **event_list_dest;
+    GList **event_list_dest;
     GIOStatus rc;
 
     while ((rc = g_io_channel_read_line(input_channel, &line, NULL, NULL,
@@ -140,7 +140,7 @@ static gboolean parse_events(GIOChannel *input_channel,
                         return FALSE;
                 }
 
-                *event_list_dest = g_slist_prepend(*event_list_dest, event);
+                *event_list_dest = g_list_prepend(*event_list_dest, event);
                 break;
             case LINE_TYPE_SECTION:
                 section_type = section_type_from_line(msg_start, error);
@@ -165,11 +165,11 @@ static gboolean parse_events(GIOChannel *input_channel,
 
     if (log_version >= 1) {
         if (init_event_list)
-            init_event_list = g_slist_reverse(init_event_list);
+            init_event_list = g_list_reverse(init_event_list);
         if (main_event_list)
-            main_event_list = g_slist_reverse(main_event_list);
+            main_event_list = g_list_reverse(main_event_list);
     } else
-        event_list = g_slist_reverse(event_list);
+        event_list = g_list_reverse(event_list);
 
     return TRUE;
 }
