@@ -49,6 +49,8 @@ static GHashTable *ports;
 #define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
 #define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
 
+#define I8042_DEV_DIR "/sys/devices/platform/i8042"
+
 #define PS2EMU_INIT_TIMEOUT_SECS 5
 
 static GIOStatus get_next_module_line(GIOChannel *input_channel,
@@ -382,9 +384,9 @@ static gboolean enable_i8042_debugging(GError **error) {
     GDir *devices_dir = NULL;
     struct sigaction sigaction_struct;
 
-    devices_dir = g_dir_open("/sys/devices/platform/i8042", 0, error);
+    devices_dir = g_dir_open(I8042_DEV_DIR, 0, error);
     if (!devices_dir) {
-        g_prefix_error(error, "While opening /sys/devices/platform/i8042: ");
+        g_prefix_error(error, "While opening " I8042_DEV_DIR ": ");
 
         goto error;
     }
@@ -399,8 +401,7 @@ static gboolean enable_i8042_debugging(GError **error) {
         if (!g_str_has_prefix(dir_name, "serio"))
             continue;
 
-        file_name = g_strconcat("/sys/devices/platform/i8042/", dir_name, "/",
-                                "drvctl", NULL);
+        file_name = g_strconcat(I8042_DEV_DIR, dir_name, "/", "drvctl", NULL);
         if (!write_to_char_dev(file_name, error, "none")) {
             g_free(file_name);
             goto error;
@@ -433,8 +434,7 @@ static gboolean enable_i8042_debugging(GError **error) {
         if (!g_str_has_prefix(dir_name, "serio"))
             continue;
 
-        file_name = g_strconcat("/sys/devices/platform/i8042/", dir_name, "/",
-                                "drvctl", NULL);
+        file_name = g_strconcat(I8042_DEV_DIR, dir_name, "/", "drvctl", NULL);
         if (!write_to_char_dev(file_name, error, "rescan")) {
             g_free(file_name);
             goto error;
