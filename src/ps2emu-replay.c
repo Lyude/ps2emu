@@ -215,10 +215,13 @@ gint main(gint argc,
     GIOStatus rc;
     int log_version;
     GError *error = NULL;
+    gboolean no_events = FALSE;
 
     GOptionEntry options[] = {
         { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           print_version, "Show the version of the application", NULL },
+        { "no-events", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
+          &no_events, "Don't replay events, just initialize the device", NULL },
         { 0 }
     };
 
@@ -288,12 +291,14 @@ gint main(gint argc,
         if (!replay_event_list(userio_channel, init_event_list, &error))
             goto error;
 
-        /* Sleep for half a second so we don't throw the driver out of sync */
-        g_usleep(500000);
+        if (!no_events) {
+            /* Sleep for half a second so we don't throw the driver out of sync */
+            g_usleep(500000);
 
-        printf("Replaying event sequence...\n");
-        if (!replay_event_list(userio_channel, main_event_list, &error))
-            goto error;
+            printf("Replaying event sequence...\n");
+            if (!replay_event_list(userio_channel, main_event_list, &error))
+                goto error;
+        }
     }
 
     return 0;
