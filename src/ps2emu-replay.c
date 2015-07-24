@@ -219,7 +219,7 @@ gint main(gint argc,
 
     GOptionEntry options[] = {
         { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
-          print_version, NULL },
+          print_version, "Show the version of the application", NULL },
         { 0 }
     };
 
