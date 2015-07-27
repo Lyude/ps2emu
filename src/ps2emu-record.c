@@ -40,7 +40,6 @@ typedef struct {
 
 static gboolean record_kbd;
 static gboolean record_aux;
-static gchar *output_file = "ps2emu_record.txt";
 static GIOChannel *output_channel;
 
 static gint64 start_time = 0;
@@ -818,11 +817,12 @@ static gboolean record(GError **error) {
 
 int main(int argc, char *argv[]) {
     GOptionContext *main_context =
-        g_option_context_new("[output_file] record PS/2 devices");
+        g_option_context_new("<output_file> record PS/2 devices");
     gboolean rc;
     GError *error = NULL;
     gchar *record_kbd_str = NULL,
-          *record_aux_str = NULL;
+          *record_aux_str = NULL,
+          *output_file;
 
     GOptionEntry options[] = {
         { "record-kbd", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING,
@@ -860,8 +860,12 @@ int main(int argc, char *argv[]) {
             "Invalid options: %s", error->message);
     }
 
-    if (argc > 1)
-        output_file = argv[1];
+    if (argc < 2) {
+        fprintf(stderr, "No output file specified\n"
+                "%s", g_option_context_get_help(main_context, TRUE, NULL));
+        return 1;
+    }
+    output_file = argv[1];
 
     output_channel = g_io_channel_new_file(output_file, "w+", &error);
     if (!output_channel) {
