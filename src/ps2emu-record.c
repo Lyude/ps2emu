@@ -939,5 +939,5 @@ out:
                 error->message);
     }
 
-    return (rc) ? -1 : 0;
+    return rc;
 }
