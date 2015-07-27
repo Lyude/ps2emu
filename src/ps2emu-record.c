@@ -39,7 +39,6 @@ typedef struct {
 } LogMsgParseResult;
 
 static PS2Port recording_target = PS2_PORT_AUX;
-static GIOChannel *output_channel;
 
 static gint64 start_time = 0;
 static time_t dmesg_start_time = 0;
@@ -220,8 +219,6 @@ static GIOStatus process_event(PS2Event *event,
                                time_t time,
                                GError **error) {
     static gboolean ignoring_events = FALSE;
-    gchar *event_str = NULL;
-    GIOStatus rc;
 
     /* Any commands that we receive with any of the port numbers are just part
      * of the i8042 probing, and can't be forwarded over serio in the relay
@@ -278,12 +275,9 @@ static GIOStatus process_event(PS2Event *event,
     if (!dmesg_start_time)
         dmesg_start_time = time;
 
-    event_str = ps2_event_to_string(event, time - dmesg_start_time);
-    rc = g_io_channel_write_chars(output_channel, event_str, -1, NULL, error);
+    printf("%s", ps2_event_to_string(event, time - dmesg_start_time));
 
-    g_free(event_str);
-
-    return rc;
+    return G_IO_STATUS_NORMAL;
 }
 
 static gboolean write_to_char_dev(const gchar *cdev,
@@ -479,11 +473,11 @@ gboolean init_timeout_checker(void *data) {
 
     /* We can just rely on the main recording function failing if this
      * happens to fail */
-    g_io_channel_write_chars(output_channel, "S: Main\n", -1, NULL, NULL);
-    g_io_channel_flush(output_channel, NULL);
+    printf("S: Main\n");
 
-    printf("The first stage of the recording has completed, you may now use "
-           "your computer normally.\n");
+    fprintf(stderr,
+            "The first stage of the recording has completed, you may now use "
+            "your computer normally.\n");
 
     return G_SOURCE_REMOVE;
 }
@@ -527,32 +521,6 @@ error:
     return FALSE;
 }
 
-static GIOStatus write_to_channel(GIOChannel *output_channel,
-                                  GError **error,
-                                  const gchar *format,
-                                  ...)
-G_GNUC_PRINTF(3, 4);
-
-static GIOStatus write_to_channel(GIOChannel *output_channel,
-                                  GError **error,
-                                  const gchar *format,
-                                  ...) {
-    gchar *output_line;
-    GIOStatus rc;
-    va_list args;
-
-    va_start(args, format);
-    output_line = g_strdup_vprintf(format, args);
-    va_end(args);
-
-    rc = g_io_channel_write_chars(output_channel, output_line,
-                                  strlen(output_line), NULL, error);
-
-    g_free(output_line);
-
-    return rc;
-}
-
 static inline gboolean change_directory(const gchar *path,
                                         GError **error) {
     int rc;
@@ -567,22 +535,20 @@ static inline gboolean change_directory(const gchar *path,
     return TRUE;
 }
 
-static gboolean write_version_info(GIOChannel *output_channel,
-                                   GError **error) {
+static gboolean write_version_info(GError **error) {
     gchar *version;
 
     if (!g_file_get_contents("/proc/version", &version, NULL, error))
         return FALSE;
 
-    write_to_channel(output_channel, error, "# Kernel Info: %s", version);
+    printf("# Kernel Info: %s", version);
 
     g_free(version);
 
     return !(*error);
 }
 
-static gboolean write_input_device_info(GIOChannel *output_channel,
-                                        const gchar *path,
+static gboolean write_input_device_info(const gchar *path,
                                         GError **error) {
     gchar *last_wd = getcwd(g_malloc(PATH_MAX), PATH_MAX),
           *input_dev_path,
@@ -630,8 +596,7 @@ static gboolean write_input_device_info(GIOChannel *output_channel,
     g_strstrip(device_port);
     g_strstrip(device_name);
 
-    write_to_channel(output_channel, error, "#    \"%s\" on %s\n",
-                     device_name, device_port);
+    printf("#    \"%s\" on %s\n", device_name, device_port);
 
       g_free(device_name);
 out5: g_free(device_port);
@@ -644,15 +609,13 @@ out1: g_free(last_wd);
     return !(*error);
 }
 
-static gboolean write_device_summary(GIOChannel *output_channel,
-                                     GError **error) {
+static gboolean write_device_summary(GError **error) {
     gchar *device_path,
           *child_device_path;
     GDir *devices_dir,
          *device_dir;
 
-    if (!write_to_channel(output_channel, error, "# Device listing:\n"))
-        return FALSE;
+    printf("# Device listing:\n");
 
     devices_dir = g_dir_open(I8042_DEV_DIR, 0, error);
     if (!devices_dir) {
@@ -668,7 +631,7 @@ static gboolean write_device_summary(GIOChannel *output_channel,
             continue;
 
         device_path = g_build_filename(I8042_DEV_DIR, dir_name, NULL);
-        if (!write_input_device_info(output_channel, device_path, error))
+        if (!write_input_device_info(device_path, error))
             goto out;
 
         /* Check for children on the PS/2 device */
@@ -683,7 +646,7 @@ static gboolean write_device_summary(GIOChannel *output_channel,
                 continue;
 
             child_device_path = g_build_filename(device_path, dir_name, NULL);
-            write_input_device_info(output_channel, child_device_path, error);
+            write_input_device_info(child_device_path, error);
 
             g_free(child_device_path);
 
@@ -696,15 +659,14 @@ out:
         g_free(device_path);
     }
 
-    write_to_channel(output_channel, error, "#\n");
+    printf("#\n");
 
     g_dir_close(devices_dir);
 
     return !(*error);
 }
 
-static gboolean write_machine_summary(GIOChannel *output_channel,
-                                      GError **error) {
+static gboolean write_machine_summary(GError **error) {
     gchar *last_wd = getcwd(g_malloc(PATH_MAX), PATH_MAX),
           *sys_vendor = NULL,
           *product_name = NULL,
@@ -724,17 +686,15 @@ static gboolean write_machine_summary(GIOChannel *output_channel,
         !g_file_get_contents("bios_version", &bios_version, NULL, error))
         goto out;
 
-    write_to_channel(output_channel,
-                     error,
-                     "# Manufacturer: %s"
-                     "# Product Name: %s"
-                     "# Version: %s"
-                     "# BIOS Vendor: %s"
-                     "# BIOS Date: %s"
-                     "# BIOS Version: %s"
-                     "#\n",
-                     sys_vendor, product_name, product_version, bios_vendor,
-                     bios_date, bios_version);
+    printf("# Manufacturer: %s"
+           "# Product Name: %s"
+           "# Version: %s"
+           "# BIOS Vendor: %s"
+           "# BIOS Date: %s"
+           "# BIOS Version: %s"
+           "#\n",
+           sys_vendor, product_name, product_version, bios_vendor, bios_date,
+           bios_version);
 
 out:
     g_free(sys_vendor);
@@ -750,11 +710,10 @@ out:
     return !(*error);
 }
 
-static gboolean write_info(GIOChannel *output_channel,
-                           GError **error) {
-    if (!write_version_info(output_channel, error) ||
-        !write_machine_summary(output_channel, error) ||
-        !write_device_summary(output_channel, error))
+static gboolean write_info(GError **error) {
+    if (!write_version_info(error) ||
+        !write_machine_summary(error) ||
+        !write_device_summary(error))
         return FALSE;
 
     return TRUE;
@@ -768,11 +727,9 @@ static gboolean record(GError **error) {
     GIOStatus rc;
     gboolean ret = TRUE;
 
-    if (!write_to_channel(output_channel, error,
-                          "T: %c\n"
-                          "S: Init\n",
-                          (recording_target == PS2_PORT_KBD) ? 'K' : 'A'))
-        return FALSE;
+    printf("T: %c\n"
+           "S: Init\n",
+           (recording_target == PS2_PORT_KBD) ? 'K' : 'A');
 
     input_channel = g_io_channel_new_file("/dev/kmsg", "r", error);
     if (!input_channel)
@@ -832,10 +789,9 @@ static gboolean process_target_arg(const gchar *option_name,
 
 int main(int argc, char *argv[]) {
     GOptionContext *main_context =
-        g_option_context_new("<output_file> record PS/2 devices");
+        g_option_context_new("record PS/2 devices");
     gboolean rc;
     GError *error = NULL;
-    gchar *output_file;
 
     GOptionEntry options[] = {
         { "target", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK,
@@ -867,20 +823,6 @@ int main(int argc, char *argv[]) {
             "Invalid options: %s", error->message);
     }
 
-    if (argc < 2) {
-        fprintf(stderr, "No output file specified\n"
-                "%s", g_option_context_get_help(main_context, TRUE, NULL));
-        return 1;
-    }
-    output_file = argv[1];
-
-    output_channel = g_io_channel_new_file(output_file, "w+", &error);
-    if (!output_channel) {
-        fprintf(stderr, "Couldn't open `%s`: %s\n", output_file,
-                error->message);
-        exit(1);
-    }
-
     if (!get_i8042_io_ports(&error)) {
         fprintf(stderr,
                 "Failed to read /proc/ioports: %s\n",
@@ -888,24 +830,23 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    printf("====== ATTENTION! ======\n"
-           "ps2emu-record will soon start recording your device. During the\n"
-           "first stage of this recording, it is VERY IMPORTANT that you do\n"
-           "not at all touch your mouse or keyboard. Doing so may potentially\n"
-           "contaminate the recording. This first stage only lasts a couple\n"
-           "of seconds at most, and ps2emu-record will notify you when it is\n"
-           "okay to touch your mouse and/or keyboard again.\n"
-           "Hit enter to continue...");
+    fprintf(stderr,
+            "====== ATTENTION! ======\n"
+            "ps2emu-record will soon start recording your device. During the\n"
+            "first stage of this recording, it is VERY IMPORTANT that you do\n"
+            "not at all touch your mouse or keyboard. Doing so may potentially\n"
+            "contaminate the recording. This first stage only lasts a couple\n"
+            "of seconds at most, and ps2emu-record will notify you when it is\n"
+            "okay to touch your mouse and/or keyboard again.\n"
+            "Hit enter to continue...");
     getchar();
-    printf("Recording has started, please don't touch your mouse or "
-           "keyboard...\n");
+    fprintf(stderr, "Recording has started, please don't touch your mouse or "
+                    "keyboard...\n");
 
     /* Write the header for the recording */
-    if (!write_to_channel(output_channel, &error, "# ps2emu-record V%d\n",
-                          PS2EMU_LOG_VERSION))
-        goto out;
+    printf("# ps2emu-record V%d\n", PS2EMU_LOG_VERSION);
 
-    if (!write_info(output_channel, &error))
+    if (!write_info(&error))
         goto out;
 
     if (!enable_i8042_debugging(&error)) {

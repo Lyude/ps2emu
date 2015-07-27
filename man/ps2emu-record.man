@@ -2,7 +2,7 @@
 .SH NAME
 ps2emu-record \- an application to record a PS/2 device for later playback
 .SH SYNOPSIS
-.B ps2emu-record \fR[\fIoptions\fR] <\fIoutput_file\fR>
+.B ps2emu-record \fR[\fIoptions\fR]
 .
 .\"*****************************************************************************
 .SH DESCRIPTION
@@ -26,7 +26,7 @@ Print a summary of command line options, and quit.
 .BR \-V\fR,\ \fB\-\-version
 Print the version of ps2emu-record, and quit.
 .TP
-.BR \-t\fR,\ \fB\-\-target\fR=<\fIKBD\fR|\fIAUX\fR>
+.BR \-t\fR,\ \fB\-\-target\fR=<\fIt coKBD\fR|\fIAUX\fR>
 Set the target port to record. This is either \fIKBD\fR, or \fIAUX\fR. \fIKBD\fR
 is usually the port where the keyboard attached, and \fIAUX\fR is usually the
 port where everything else (including mice and touchpads). If you need to record
