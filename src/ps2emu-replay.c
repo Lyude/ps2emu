@@ -134,6 +134,11 @@ static gboolean parse_events(GIOChannel *input_channel,
 
     while ((rc = g_io_channel_read_line(input_channel, &line, NULL, NULL,
                                         error)) == G_IO_STATUS_NORMAL) {
+        g_strchug(line);
+
+        if (line[0] == '#' || line[0] == '\n')
+            continue;
+
         if (log_version < 1) {
             line_type = LINE_TYPE_EVENT;
             msg_start = line;
