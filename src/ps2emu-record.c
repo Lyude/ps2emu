@@ -908,7 +908,7 @@ int main(int argc, char *argv[]) {
            "contaminate the recording. This first stage only lasts a couple\n"
            "of seconds at most, and ps2emu-record will notify you when it is\n"
            "okay to touch your mouse and/or keyboard again.\n"
-           "Press any key to continue...\n");
+           "Hit enter to continue...");
     getchar();
     printf("Recording has started, please don't touch your mouse or "
            "keyboard...\n");
