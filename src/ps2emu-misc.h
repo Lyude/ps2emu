@@ -25,7 +25,8 @@
 
 typedef enum {
     PS2EMU_ERROR_INPUT,
-    PS2EMU_ERROR_NO_EVENTS
+    PS2EMU_ERROR_NO_EVENTS,
+    PS2EMU_ERROR_MISC
 } PS2Error;
 
 gboolean print_version(const gchar *option_name,

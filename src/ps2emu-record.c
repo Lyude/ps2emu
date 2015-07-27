@@ -15,11 +15,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <error.h>
 #include <glib.h>
 #include <signal.h>
+#include <linux/limits.h>
 
 #include "ps2emu-section.h"
 #include "ps2emu-misc.h"
@@ -49,7 +51,7 @@ static GHashTable *ports;
 #define I8042_OUTPUT  (g_quark_from_static_string("i8042: "))
 #define PS2EMU_OUTPUT (g_quark_from_static_string("ps2emu: "))
 
-#define I8042_DEV_DIR "/sys/devices/platform/i8042"
+#define I8042_DEV_DIR "/sys/devices/platform/i8042/"
 
 #define PS2EMU_INIT_TIMEOUT_SECS 5
 
@@ -528,23 +530,252 @@ error:
     return FALSE;
 }
 
+static GIOStatus write_to_channel(GIOChannel *output_channel,
+                                  GError **error,
+                                  const gchar *format,
+                                  ...)
+G_GNUC_PRINTF(3, 4);
+
+static GIOStatus write_to_channel(GIOChannel *output_channel,
+                                  GError **error,
+                                  const gchar *format,
+                                  ...) {
+    gchar *output_line;
+    GIOStatus rc;
+    va_list args;
+
+    va_start(args, format);
+    output_line = g_strdup_vprintf(format, args);
+    va_end(args);
+
+    rc = g_io_channel_write_chars(output_channel, output_line,
+                                  strlen(output_line), NULL, error);
+
+    g_free(output_line);
+
+    return rc;
+}
+
+static inline gboolean change_directory(const gchar *path,
+                                        GError **error) {
+    int rc;
+
+    rc = chdir(path);
+    if (rc) {
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
+                    "When changing directory to %s: %s", path, strerror(errno));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static gboolean write_version_info(GIOChannel *output_channel,
+                                   GError **error) {
+    gchar *version;
+
+    if (!g_file_get_contents("/proc/version", &version, NULL, error))
+        return FALSE;
+
+    write_to_channel(output_channel, error, "# Kernel Info: %s", version);
+
+    g_free(version);
+
+    return !(*error);
+}
+
+static gboolean write_input_device_info(GIOChannel *output_channel,
+                                        const gchar *path,
+                                        GError **error) {
+    gchar *last_wd = getcwd(g_malloc(PATH_MAX), PATH_MAX),
+          *input_dev_path,
+          *device_name,
+          *device_port;
+    GDir *input_dir;
+
+    if (!change_directory(path, error))
+        goto out1;
+
+    /* If the subdirectory "input" exists, there's probably an input device
+     * attached to this i8042 port */
+    input_dir = g_dir_open("input", 0, error);
+    if (!input_dir) {
+        if (g_error_matches(*error, G_FILE_ERROR, G_FILE_ERROR_NOENT) ||
+            g_error_matches(*error, G_FILE_ERROR, G_FILE_ERROR_NOTDIR))
+            g_clear_error(error);
+
+        goto out2;
+    }
+
+    /* Find the directory containing the information on the device */
+    input_dev_path = NULL;
+    for (const gchar *dir_name = g_dir_read_name(input_dir);
+         dir_name != NULL && *error == NULL;
+         dir_name = g_dir_read_name(input_dir)) {
+
+        if (g_str_has_prefix(dir_name, "input")) {
+            input_dev_path = g_build_filename("input", dir_name, NULL);
+            break;
+        }
+    }
+    if (!input_dev_path)
+        goto out3;
+
+    if (!g_file_get_contents("description", &device_port, NULL, error))
+        goto out4;
+
+    if (!change_directory(input_dev_path, error))
+        goto out5;
+
+    if (!g_file_get_contents("name", &device_name, NULL, error))
+        goto out5;
+
+    g_strstrip(device_port);
+    g_strstrip(device_name);
+
+    write_to_channel(output_channel, error, "#    \"%s\" on %s\n",
+                     device_name, device_port);
+
+      g_free(device_name);
+out5: g_free(device_port);
+out4: g_free(input_dev_path);
+out3: g_dir_close(input_dir);
+
+out2: change_directory(last_wd, error);
+out1: g_free(last_wd);
+
+    return !(*error);
+}
+
+static gboolean write_device_summary(GIOChannel *output_channel,
+                                     GError **error) {
+    gchar *device_path,
+          *child_device_path;
+    GDir *devices_dir,
+         *device_dir;
+
+    if (!write_to_channel(output_channel, error, "# Device listing:\n"))
+        return FALSE;
+
+    devices_dir = g_dir_open(I8042_DEV_DIR, 0, error);
+    if (!devices_dir) {
+        g_prefix_error(error, "While opening " I8042_DEV_DIR ": ");
+
+        return FALSE;
+    }
+
+    for (const gchar *dir_name = g_dir_read_name(devices_dir);
+         dir_name != NULL && *error == NULL;
+         dir_name = g_dir_read_name(devices_dir)) {
+        if (!g_str_has_prefix(dir_name, "serio"))
+            continue;
+
+        device_path = g_build_filename(I8042_DEV_DIR, dir_name, NULL);
+        if (!write_input_device_info(output_channel, device_path, error))
+            goto out;
+
+        /* Check for children on the PS/2 device */
+        device_dir = g_dir_open(device_path, 0, error);
+        if (!device_dir)
+            goto out;
+
+        for (const gchar *dir_name = g_dir_read_name(device_dir);
+             dir_name != NULL && *error == NULL;
+             dir_name = g_dir_read_name(device_dir)) {
+            if (!g_str_has_prefix(dir_name, "serio"))
+                continue;
+
+            child_device_path = g_build_filename(device_path, dir_name, NULL);
+            write_input_device_info(output_channel, child_device_path, error);
+
+            g_free(child_device_path);
+
+            if (*error)
+                goto out;
+        }
+out:
+
+        g_dir_close(device_dir);
+        g_free(device_path);
+    }
+
+    write_to_channel(output_channel, error, "#\n");
+
+    g_dir_close(devices_dir);
+
+    return !(*error);
+}
+
+static gboolean write_machine_summary(GIOChannel *output_channel,
+                                      GError **error) {
+    gchar *last_wd = getcwd(g_malloc(PATH_MAX), PATH_MAX),
+          *sys_vendor = NULL,
+          *product_name = NULL,
+          *product_version = NULL,
+          *bios_vendor = NULL,
+          *bios_date = NULL,
+          *bios_version = NULL;
+
+    if (!change_directory("/sys/class/dmi/id", error))
+        return FALSE;
+
+    if (!g_file_get_contents("sys_vendor", &sys_vendor, NULL, error) ||
+        !g_file_get_contents("product_name", &product_name, NULL, error) ||
+        !g_file_get_contents("product_version", &product_version, NULL, error) ||
+        !g_file_get_contents("bios_vendor", &bios_vendor, NULL, error) ||
+        !g_file_get_contents("bios_date", &bios_date, NULL, error) ||
+        !g_file_get_contents("bios_version", &bios_version, NULL, error))
+        goto out;
+
+    write_to_channel(output_channel,
+                     error,
+                     "# Manufacturer: %s"
+                     "# Product Name: %s"
+                     "# Version: %s"
+                     "# BIOS Vendor: %s"
+                     "# BIOS Date: %s"
+                     "# BIOS Version: %s"
+                     "#\n",
+                     sys_vendor, product_name, product_version, bios_vendor,
+                     bios_date, bios_version);
+
+out:
+    g_free(sys_vendor);
+    g_free(product_name);
+    g_free(product_version);
+    g_free(bios_vendor);
+    g_free(bios_date);
+    g_free(bios_version);
+
+    change_directory(last_wd, error);
+    g_free(last_wd);
+
+    return !(*error);
+}
+
+static gboolean write_info(GIOChannel *output_channel,
+                           GError **error) {
+    if (!write_version_info(output_channel, error) ||
+        !write_machine_summary(output_channel, error) ||
+        !write_device_summary(output_channel, error))
+        return FALSE;
+
+    return TRUE;
+}
+
 static gboolean record(GError **error) {
-    GIOChannel *input_channel = g_io_channel_new_file("/dev/kmsg", "r", error);
+    GIOChannel *input_channel;
     LogMsgParseResult res;
     InitTimeoutCheckerArgs timeout_checker_args;
     DmesgEventHandlerArgs dmesg_event_handler_args;
     GIOStatus rc;
     gboolean ret = TRUE;
 
-    if (!input_channel)
+    if (!write_to_channel(output_channel, error, "S: Init\n"))
         return FALSE;
 
-    rc = g_io_channel_write_chars(output_channel,
-                                  "# ps2emu-record V"
-                                  G_STRINGIFY(PS2EMU_LOG_VERSION) " \n"
-                                  "S: Init\n",
-                                  -1, NULL, error);
-    if (rc != G_IO_STATUS_NORMAL)
+    input_channel = g_io_channel_new_file("/dev/kmsg", "r", error);
+    if (!input_channel)
         return FALSE;
 
     while ((rc = parse_next_message(input_channel, &res, error)) ==
@@ -682,6 +913,14 @@ int main(int argc, char *argv[]) {
     printf("Recording has started, please don't touch your mouse or "
            "keyboard...\n");
 
+    /* Write the header for the recording */
+    if (!write_to_channel(output_channel, &error, "# ps2emu-record V%d\n",
+                          PS2EMU_LOG_VERSION))
+        goto out;
+
+    if (!write_info(output_channel, &error))
+        goto out;
+
     if (!enable_i8042_debugging(&error)) {
         fprintf(stderr,
                 "Failed to enable i8042 debugging: %s\n",
@@ -692,11 +931,13 @@ int main(int argc, char *argv[]) {
     g_option_context_free(main_context);
 
     rc = record(&error);
+
+out:
     disable_i8042_debugging();
-    if (!rc) {
+    if (error) {
         fprintf(stderr, "Error: %s\n",
                 error->message);
-
-        return 1;
     }
+
+    return (rc) ? -1 : 0;
 }
