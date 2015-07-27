@@ -29,15 +29,7 @@ gchar * ps2_event_to_string(PS2Event *event,
                             time_t time) {
     gchar *event_str,
           *comment;
-    gchar origin,
-          direction;
-
-    if (event->type == PS2_EVENT_TYPE_KBD_DATA ||
-        (event->type == PS2_EVENT_TYPE_INTERRUPT &&
-         event->origin == PS2_EVENT_ORIGIN_KEYBOARD))
-        origin = 'K';
-    else
-        origin = 'A';
+    gchar direction;
 
     if (event->type == PS2_EVENT_TYPE_INTERRUPT ||
         event->type == PS2_EVENT_TYPE_RETURN)
@@ -50,14 +42,15 @@ gchar * ps2_event_to_string(PS2Event *event,
     comment = g_strdup(strstr(event->original_line, "("));
     g_strchomp(comment);
 
-    event_str = g_strdup_printf("E: %-10ld %c %c %.2hhx # %s\n",
-                                time, origin, direction, event->data, comment);
+    event_str = g_strdup_printf("E: %-10ld %c %.2hhx # %s\n",
+                                time, direction, event->data, comment);
     g_free(comment);
 
     return event_str;
 }
 
 PS2Event * ps2_event_from_line(const gchar *str,
+                               int log_version,
                                GError **error) {
     gchar const *str_start = &str[strspn(str, " \t")];
     int parsed_count;
@@ -71,23 +64,39 @@ PS2Event * ps2_event_from_line(const gchar *str,
     new_event = g_slice_alloc(sizeof(PS2Event));
 
     errno = 0;
-    parsed_count = sscanf(str_start, "%ld %c %c %hhx",
-                          &new_event->time, &origin_char, &direction_char,
-                          &new_event->data);
-    if (errno != 0 || parsed_count != 4) {
-        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                    "Invalid event line '%s'", str);
-        goto error;
-    }
 
-    if (origin_char == 'K')
-        new_event->origin = PS2_EVENT_ORIGIN_KEYBOARD;
-    else if (origin_char == 'A')
-        new_event->origin = PS2_EVENT_ORIGIN_AUX;
-    else {
-        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                    "Invalid event origin '%c' from '%s'", origin_char, str);
-        goto error;
+    /* In the first log version, we originally specified the origin device each
+     * event was coming from. This ended up being uneccessary, and as of log
+     * version 1 we no longer record this */
+    if (log_version == 0) {
+        parsed_count = sscanf(str_start, "%ld %c %c %hhx",
+                              &new_event->time, &origin_char, &direction_char,
+                              &new_event->data);
+        if (errno != 0 || parsed_count != 4) {
+            g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
+                        "Invalid event line '%s'", str);
+            goto error;
+        }
+
+        if (origin_char == 'K')
+            new_event->origin = PS2_PORT_KBD;
+        else if (origin_char == 'A')
+            new_event->origin = PS2_PORT_AUX;
+        else {
+            g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
+                        "Invalid event origin '%c' from '%s'", origin_char,
+                        str);
+            goto error;
+        }
+    } else {
+        parsed_count = sscanf(str_start, "%ld %c %hhx",
+                              &new_event->time, &direction_char,
+                              &new_event->data);
+        if (errno != 0 || parsed_count != 3) {
+            g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
+                        "Invalid event line '%s'", str);
+            goto error;
+        }
     }
 
     if (direction_char == 'S')

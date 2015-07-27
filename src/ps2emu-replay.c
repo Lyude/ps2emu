@@ -32,6 +32,8 @@ static GList *event_list;
 static GList *init_event_list;
 static GList *main_event_list;
 
+static PS2Port replay_device_type = PS2_PORT_AUX;
+
 static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
                                  guint8 data,
@@ -147,8 +149,23 @@ static gboolean parse_events(GIOChannel *input_channel,
             line_type = get_line_type(line, &msg_start, error);
 
         switch (line_type) {
+            case LINE_TYPE_DEVICE_TYPE:
+                switch (msg_start[0]) {
+                    case 'K':
+                        replay_device_type = PS2_PORT_KBD;
+                        break;
+                    case 'A':
+                        replay_device_type = PS2_PORT_AUX;
+                        break;
+                    default:
+                        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
+                                    "Invalid device type '%c'\n", msg_start[0]);
+                        return FALSE;
+                }
+
+                break;
             case LINE_TYPE_EVENT:
-                event = ps2_event_from_line(msg_start, error);
+                event = ps2_event_from_line(msg_start, log_version, error);
 
                 if (!event) {
                     if (!*error)
@@ -236,6 +253,7 @@ gint main(gint argc,
     GError *error = NULL;
     gboolean no_events = FALSE,
              keep_running = FALSE;
+    __u8 port_type;
 
     GOptionEntry options[] = {
         { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
@@ -297,7 +315,9 @@ gint main(gint argc,
     }
     g_io_channel_set_buffered(userio_channel, FALSE);
 
-    rc = send_userio_cmd(userio_channel, USERIO_CMD_SET_PORT_TYPE, SERIO_8042,
+    port_type = (replay_device_type == PS2_PORT_KBD) ?
+        SERIO_8042_XL : SERIO_8042;
+    rc = send_userio_cmd(userio_channel, USERIO_CMD_SET_PORT_TYPE, port_type,
                          &error);
     if (rc != G_IO_STATUS_NORMAL) {
         g_prefix_error(&error, "While setting port type on /dev/userio: ");
@@ -311,6 +331,8 @@ gint main(gint argc,
     }
 
     if (log_version == 0) {
+        replay_device_type = PS2_PORT_AUX;
+
         if (!replay_event_list(userio_channel, event_list, FALSE, &error))
             goto error;
     } else {

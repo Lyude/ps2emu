@@ -18,6 +18,8 @@
 
 #include <glib.h>
 
+#include "ps2emu-misc.h"
+
 #define PS2_KEYBOARD_PORT 0
 
 typedef enum {
@@ -28,14 +30,16 @@ typedef enum {
     PS2_EVENT_TYPE_INTERRUPT
 } PS2EventType;
 
+typedef enum {
+    PS2_PORT_KBD,
+    PS2_PORT_AUX
+} PS2Port;
+
 typedef struct {
     time_t        time;
     PS2EventType  type;
     guchar        data;
-    enum {
-        PS2_EVENT_ORIGIN_KEYBOARD,
-        PS2_EVENT_ORIGIN_AUX
-    } origin;
+    PS2Port       origin;
     const gchar  *original_line;
 } PS2Event;
 
@@ -46,6 +50,7 @@ gchar * ps2_event_to_string(PS2Event *event,
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
 PS2Event * ps2_event_from_line(const gchar *str,
+                               int log_version,
                                GError **error)
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
