@@ -22,6 +22,7 @@ typedef enum {
     LINE_TYPE_EVENT       = 'E',
     LINE_TYPE_SECTION     = 'S',
     LINE_TYPE_DEVICE_TYPE = 'T',
+    LINE_TYPE_NOTE        = 'N',
     LINE_TYPE_INVALID     = -1
 } LineType;
 

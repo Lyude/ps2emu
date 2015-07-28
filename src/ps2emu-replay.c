@@ -29,12 +29,24 @@
 
 #define PS2EMU_MIN_EVENT_DELAY 5 /* in seconds */
 
+typedef struct {
+    LineType type;
+    union {
+        PS2Event *ps2_event;
+        gchar *note;
+    };
+} LogLine;
+
 static GList *event_list;
 
 static GList *init_event_list;
 static GList *main_event_list;
 
 static PS2Port replay_device_type = PS2_PORT_AUX;
+
+static LogLine * log_line_new() {
+    return g_slice_alloc(sizeof(LogLine));
+}
 
 static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
@@ -92,32 +104,44 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
     return TRUE;
 }
 
-static gboolean replay_event_list(GIOChannel *userio_channel,
-                                  GList *event_list,
-                                  time_t max_wait,
-                                  GError **error) {
-    PS2Event *event;
+static gboolean replay_line_list(GIOChannel *userio_channel,
+                                 GList *event_list,
+                                 time_t max_wait,
+                                 time_t note_delay,
+                                 GError **error) {
+    LogLine *log_line;
     const time_t start_time = g_get_monotonic_time();
-    time_t offset = 0;
+    long offset = 0;
 
     for (GList *l = event_list; l != NULL; l = l->next) {
-        event = l->data;
+        log_line = l->data;
+
+        if (log_line->type == LINE_TYPE_NOTE) {
+            printf("User note: %s\n",
+                   log_line->note);
+
+            g_usleep(note_delay);
+            offset -= note_delay;
+
+            continue;
+        }
 
         if (max_wait && l->prev) {
-            PS2Event *last_event = l->prev->data;
-            time_t wait_time = event->time - last_event->time;
+            LogLine *last_line = l->prev->data;
+            time_t wait_time =
+                log_line->ps2_event->time - last_line->ps2_event->time;
 
             /* If necessary, time-travel to the future */
             if (wait_time > max_wait)
                 offset += wait_time - max_wait;
         }
 
-        if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
+        if (log_line->ps2_event->type == PS2_EVENT_TYPE_INTERRUPT) {
             if (!simulate_interrupt(userio_channel, start_time, offset,
-                                    event, error))
+                                    log_line->ps2_event, error))
                 return FALSE;
         } else {
-            if (!simulate_receive(userio_channel, event, error))
+            if (!simulate_receive(userio_channel, log_line->ps2_event, error))
                 return FALSE;
         }
     }
@@ -130,6 +154,7 @@ static gboolean parse_events(GIOChannel *input_channel,
                              GError **error) {
     gchar *line;
     LineType line_type;
+    LogLine *log_line;
     PS2Event *event;
     LogSectionType section_type;
     gchar *msg_start;
@@ -176,7 +201,13 @@ static gboolean parse_events(GIOChannel *input_channel,
                         return FALSE;
                 }
 
-                *event_list_dest = g_list_prepend(*event_list_dest, event);
+                log_line = log_line_new();
+                *log_line = (LogLine) {
+                    .type = line_type,
+                    .ps2_event = event,
+                };
+
+                *event_list_dest = g_list_prepend(*event_list_dest, log_line);
                 break;
             case LINE_TYPE_SECTION:
                 section_type = section_type_from_line(msg_start, error);
@@ -191,6 +222,24 @@ static gboolean parse_events(GIOChannel *input_channel,
                     case SECTION_TYPE_ERROR:
                         return FALSE;
                 }
+                break;
+            case LINE_TYPE_NOTE:
+                /* Remove the newline character from the end of the note */
+                g_strchomp(msg_start);
+
+                if (strlen(msg_start) == 0) {
+                    g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
+                                        "Note is empty");
+                    return FALSE;
+                }
+
+                log_line = log_line_new();
+                *log_line = (LogLine) {
+                    .type = line_type,
+                    .note = g_strdup(msg_start),
+                };
+
+                *event_list_dest = g_list_prepend(*event_list_dest, log_line);
                 break;
             case LINE_TYPE_INVALID:
                 return FALSE;
@@ -252,7 +301,8 @@ gint main(gint argc,
     GIOStatus rc;
     int log_version;
     time_t max_wait = 0,
-           event_delay = 0;
+           event_delay = 0,
+           note_delay = 0;
     GError *error = NULL;
     gboolean no_events = FALSE,
              keep_running = FALSE;
@@ -270,6 +320,9 @@ gint main(gint argc,
           "n", },
         { "event-delay", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT,
           &event_delay, "Wait n seconds after init before playing events",
+          "n" },
+        { "note-delay", 'D', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT,
+          &note_delay, "Wait n seconds after printing a user note",
           "n" },
         { 0 }
     };
@@ -289,6 +342,7 @@ gint main(gint argc,
 
     max_wait *= G_USEC_PER_SEC;
     event_delay = (event_delay + PS2EMU_MIN_EVENT_DELAY) * G_USEC_PER_SEC;
+    note_delay *= G_USEC_PER_SEC;
 
     input_channel = g_io_channel_new_file(argv[1], "r", &error);
     if (!input_channel) {
@@ -340,11 +394,11 @@ gint main(gint argc,
     if (log_version == 0) {
         replay_device_type = PS2_PORT_AUX;
 
-        if (!replay_event_list(userio_channel, event_list, 0, &error))
+        if (!replay_line_list(userio_channel, event_list, 0, 0, &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_event_list(userio_channel, init_event_list, 0, &error))
+        if (!replay_line_list(userio_channel, init_event_list, 0, 0, &error))
             goto error;
 
         printf("Device initialized\n");
@@ -354,8 +408,8 @@ gint main(gint argc,
             g_usleep(event_delay);
 
             printf("Replaying event sequence...\n");
-            if (!replay_event_list(userio_channel, main_event_list, max_wait,
-                                   &error))
+            if (!replay_line_list(userio_channel, main_event_list, max_wait,
+                                  note_delay, &error))
                 goto error;
         }
 

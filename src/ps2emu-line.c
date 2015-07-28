@@ -38,6 +38,7 @@ LineType get_line_type(gchar *line,
         case LINE_TYPE_EVENT:
         case LINE_TYPE_SECTION:
         case LINE_TYPE_DEVICE_TYPE:
+        case LINE_TYPE_NOTE:
             type = type_char;
             break;
         default:

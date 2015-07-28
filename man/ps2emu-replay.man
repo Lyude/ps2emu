@@ -52,6 +52,31 @@ input device.
 
 By default, we always wait half a second before replaying the events (otherwise
 the device goes out of sync).
+.TP
+.BR \-D\fR,\ \fB\-\-note-delay=\fIn\fR
+Wait \fIn\fR after printing a user note. For more information, see the \fBUSER
+NOTES\fR section for more information on user notes.
+.
+.\"*****************************************************************************
+.SH "USER NOTES"
+Many times when playing back a recording, a user might perform multiple actions,
+all of which the developer is interested in seeing. For example, one user might
+record a single click, double click, and triple click to demonstrate a bug with
+their touchpad driver. In cases like this, it can be useful to have
+\fBps2emu-replay\fR notify you between each of these actions, and even add a
+delay between each of them. For this reason, V1 logs support a feature called
+user notes. These are lines that may be inserted anywhere in the main event
+section of a log with a custom annotation. To insert a usernote, create a line
+in the log before the series of events you'd like to make note of that looks
+like this:
+.EX
+
+    N: \fIMessage\fR
+
+.EE
+Where \fIMessage\fR is the message you would like \fBps2emu-record\fR to display
+once the line is reached. Any characters may be used in the message, so long as
+the message remains on a single line.
 .
 .\"*****************************************************************************
 .SH "CONVERTING LOGS TO V1"
