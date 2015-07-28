@@ -31,6 +31,9 @@ Print a summary of command line options, and quit.
 .BR \-V\fR,\ \fB\-\-version
 Print the version of ps2emu-record, and quit.
 .TP
+.BR \-v\fR,\ \fB\-\-verbose
+Turns on printing of events being sent and received over /dev/userio.
+.TP
 .BR \-\-no\-events
 Don't replay any of the actual input events from the device, just create the
 device with the initialization sequence in the log.

@@ -67,6 +67,7 @@ static gboolean simulate_interrupt(GIOChannel *userio_channel,
                                    time_t start_time,
                                    time_t offset,
                                    PS2Event *event,
+                                   gboolean verbose,
                                    GError **error) {
     time_t current_time;
     GIOStatus rc;
@@ -74,6 +75,9 @@ static gboolean simulate_interrupt(GIOChannel *userio_channel,
     current_time = g_get_monotonic_time() - start_time + offset;
     if (current_time < event->time)
         g_usleep(event->time - current_time);
+
+    if (verbose)
+        printf("Send\t-> %hhx\n", event->data);
 
     rc = send_userio_cmd(userio_channel, USERIO_CMD_SEND_INTERRUPT,
                          event->data, error);
@@ -85,6 +89,7 @@ static gboolean simulate_interrupt(GIOChannel *userio_channel,
 
 static gboolean simulate_receive(GIOChannel *userio_channel,
                                  PS2Event *event,
+                                 gboolean verbose,
                                  GError **error) {
     guchar data;
     gsize count;
@@ -96,9 +101,9 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
     if (rc != G_IO_STATUS_NORMAL)
         return FALSE;
 
-    if (event->data == data)
-        printf("Received expected data %hhx\n", data);
-    else
+    if (verbose && event->data == data)
+        printf("Receive\t<- %hhx\n", data);
+    else if (event->data != data)
         printf("Expected %hhx, received %hhx\n", event->data, data);
 
     return TRUE;
@@ -108,6 +113,7 @@ static gboolean replay_line_list(GIOChannel *userio_channel,
                                  GList *event_list,
                                  time_t max_wait,
                                  time_t note_delay,
+                                 gboolean verbose,
                                  GError **error) {
     LogLine *log_line;
     const time_t start_time = g_get_monotonic_time();
@@ -138,10 +144,11 @@ static gboolean replay_line_list(GIOChannel *userio_channel,
 
         if (log_line->ps2_event->type == PS2_EVENT_TYPE_INTERRUPT) {
             if (!simulate_interrupt(userio_channel, start_time, offset,
-                                    log_line->ps2_event, error))
+                                    log_line->ps2_event, verbose, error))
                 return FALSE;
         } else {
-            if (!simulate_receive(userio_channel, log_line->ps2_event, error))
+            if (!simulate_receive(userio_channel, log_line->ps2_event, verbose,
+                                  error))
                 return FALSE;
         }
     }
@@ -305,12 +312,15 @@ gint main(gint argc,
            note_delay = 0;
     GError *error = NULL;
     gboolean no_events = FALSE,
-             keep_running = FALSE;
+             keep_running = FALSE,
+             verbose = FALSE;
     __u8 port_type;
 
     GOptionEntry options[] = {
         { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
           print_version, "Show the version of the application", NULL },
+        { "verbose", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
+          &verbose, "Be more verbose when replaying events", NULL },
         { "no-events", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
           &no_events, "Don't replay events, just initialize the device", NULL },
         { "keep-running", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
@@ -394,11 +404,13 @@ gint main(gint argc,
     if (log_version == 0) {
         replay_device_type = PS2_PORT_AUX;
 
-        if (!replay_line_list(userio_channel, event_list, 0, 0, &error))
+        if (!replay_line_list(userio_channel, event_list, 0, 0, verbose,
+                              &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_line_list(userio_channel, init_event_list, 0, 0, &error))
+        if (!replay_line_list(userio_channel, init_event_list, 0, 0, verbose,
+                              &error))
             goto error;
 
         printf("Device initialized\n");
@@ -409,7 +421,7 @@ gint main(gint argc,
 
             printf("Replaying event sequence...\n");
             if (!replay_line_list(userio_channel, main_event_list, max_wait,
-                                  note_delay, &error))
+                                  note_delay, verbose, &error))
                 goto error;
         }
 
