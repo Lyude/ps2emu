@@ -54,6 +54,86 @@ By default, we always wait half a second before replaying the events (otherwise
 the device goes out of sync).
 .
 .\"*****************************************************************************
+.SH "CONVERTING LOGS TO V1"
+Just about all of the extra options (\fB\-\-no-events\fR,
+\fB\-\-keep-running\fR, etc.) don't do anything when being used with a V0 log.
+The reason for this being that because of the limitations of the original
+logging format, most of these features are impossible to implement. If you need
+any of these features, here's the steps you need to take to convert a V0 log to
+a V1 log:
+.IP \(bu
+Change the version of the log header from V0 to V1
+.IP \(bu
+Prefix every event with "E: " to mark it as an event
+.IP \(bu
+Remove the second column from each event (this column will either contain "A" or
+"K")
+.IP \(bu
+Add the following two lines directly below the log header:
+.EX
+
+    T: \fIPortType\fR
+    S: Init
+
+.EE
+Where \fIPortType\fR is either "A" (indicates that the device being recorded is
+on the AUX port) or "K" (indicates that the device being recorded is on the KBD
+port)
+.IP \(bu
+Figure out where the device initialization ends. The device initialization is
+the data that's sent to and from the PS/2 device in order to set it up with the
+operating system, and occurs before any of the actual input events are received
+from the device. With mice devices, this is where the mouse sends the 0xF4
+(begin data reporting) command to the host, and the host responds with a final
+0xFF (acknowledge). So, the lines will look something like this:
+.EX
+
+    5528124    S f4 # (parameter)
+    5530868    R fa # (interrupt, 1, 12)
+
+.EE
+After those two lines, just about every single line should be an interrupt. When
+you find the end of the initialization sequence, insert this line directly below
+the end of it:
+.EX
+
+    S: Main
+
+.EE
+.IP \(bu
+Take note of the time the first event after the main section starts. The time of
+the event will be the first number after the "E: ". Then, subtract this time
+from every single event in the main section (including the first event). So, if
+we had a few events that looked like this:
+.EX
+
+    S: Main
+    E: 6610789    R 90 # (interrupt, 1, 12)
+    E: 6611976    R b8 # (interrupt, 1, 12)
+    E: 6613205    R 24 # (interrupt, 1, 12)
+    E: 6614486    R c0 # (interrupt, 1, 12)
+    E: 6615698    R f2 # (interrupt, 1, 12)
+    E: 6616910    R 2e # (interrupt, 1, 12)
+
+.EE
+The time we'd be subtracting from every event would be "6610789", so we'd come
+out with something looking like this:
+.EX
+
+    S: Main
+    E: 0          R 90 # (interrupt, 1, 12)
+    E: 1187       R b8 # (interrupt, 1, 12)
+    E: 2416       R 24 # (interrupt, 1, 12)
+    E: 3697       R c0 # (interrupt, 1, 12)
+    E: 4909       R f2 # (interrupt, 1, 12)
+    E: 6121       R 2e # (interrupt, 1, 12)
+
+.EE
+.P
+Please note that logs which contain both events from the KBD port and the AUX
+port cannot be ported to V0 unless you remove events from one of the two ports.
+.
+.\"*****************************************************************************
 .SH "SEE ALSO"
 .
 .BR ps2emu-record (1)
