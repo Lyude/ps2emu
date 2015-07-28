@@ -27,6 +27,8 @@
 #include <linux/serio.h>
 #include <userio.h>
 
+#define PS2EMU_MIN_EVENT_DELAY 5 /* in seconds */
+
 static GList *event_list;
 
 static GList *init_event_list;
@@ -249,7 +251,8 @@ gint main(gint argc,
                *userio_channel;
     GIOStatus rc;
     int log_version;
-    time_t max_wait = 0;
+    time_t max_wait = 0,
+           event_delay = 0;
     GError *error = NULL;
     gboolean no_events = FALSE,
              keep_running = FALSE;
@@ -265,6 +268,9 @@ gint main(gint argc,
         { "max-wait", 'w', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT,
           &max_wait, "Don't wait for longer then n seconds between events",
           "n", },
+        { "event-delay", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT,
+          &event_delay, "Wait n seconds after init before playing events",
+          "n" },
         { 0 }
     };
 
@@ -282,6 +288,7 @@ gint main(gint argc,
                              "information");
 
     max_wait *= G_USEC_PER_SEC;
+    event_delay = (event_delay + PS2EMU_MIN_EVENT_DELAY) * G_USEC_PER_SEC;
 
     input_channel = g_io_channel_new_file(argv[1], "r", &error);
     if (!input_channel) {
@@ -340,9 +347,11 @@ gint main(gint argc,
         if (!replay_event_list(userio_channel, init_event_list, FALSE, &error))
             goto error;
 
+        printf("Device initialized\n");
+
         if (!no_events) {
             /* Sleep for half a second so we don't throw the driver out of sync */
-            g_usleep(500000);
+            g_usleep(event_delay);
 
             printf("Replaying event sequence...\n");
             if (!replay_event_list(userio_channel, main_event_list, max_wait,

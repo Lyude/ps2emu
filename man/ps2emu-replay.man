@@ -44,6 +44,14 @@ Don't wait any longer then \fIn\fR seconds between events. This helps in
 situations where the recorded event log is very long, and there happen to be
 long gaps between each set of events so that the developer doesn't need to wait
 each time.
+.TP
+.BR \-d\fR,\ \fB\-\-event-delay=\fIn\fR
+Wait \fIn\fR seconds after initializing the device before we replay the events.
+Useful in cases where you might need to attach a tool such as evtest to the
+input device.
+
+By default, we always wait half a second before replaying the events (otherwise
+the device goes out of sync).
 .
 .\"*****************************************************************************
 .SH "SEE ALSO"
