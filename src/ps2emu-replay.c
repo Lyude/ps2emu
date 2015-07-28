@@ -340,11 +340,11 @@ gint main(gint argc,
     if (log_version == 0) {
         replay_device_type = PS2_PORT_AUX;
 
-        if (!replay_event_list(userio_channel, event_list, FALSE, &error))
+        if (!replay_event_list(userio_channel, event_list, 0, &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_event_list(userio_channel, init_event_list, FALSE, &error))
+        if (!replay_event_list(userio_channel, init_event_list, 0, &error))
             goto error;
 
         printf("Device initialized\n");
