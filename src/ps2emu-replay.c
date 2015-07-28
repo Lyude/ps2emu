@@ -53,13 +53,13 @@ static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
 
 static gboolean simulate_interrupt(GIOChannel *userio_channel,
                                    time_t start_time,
-                                   time_t skip_offset,
+                                   time_t offset,
                                    PS2Event *event,
                                    GError **error) {
     time_t current_time;
     GIOStatus rc;
 
-    current_time = g_get_monotonic_time() - start_time + skip_offset;
+    current_time = g_get_monotonic_time() - start_time + offset;
     if (current_time < event->time)
         g_usleep(event->time - current_time);
 
@@ -98,7 +98,7 @@ static gboolean replay_event_list(GIOChannel *userio_channel,
                                   GError **error) {
     PS2Event *event;
     const time_t start_time = g_get_monotonic_time();
-    time_t skip_offset = 0;
+    time_t offset = 0;
 
     for (GList *l = event_list; l != NULL; l = l->next) {
         event = l->data;
@@ -109,11 +109,11 @@ static gboolean replay_event_list(GIOChannel *userio_channel,
 
             /* If necessary, time-travel to the future */
             if (wait_time > max_wait)
-                skip_offset += wait_time - max_wait;
+                offset += wait_time - max_wait;
         }
 
         if (event->type == PS2_EVENT_TYPE_INTERRUPT) {
-            if (!simulate_interrupt(userio_channel, start_time, skip_offset,
+            if (!simulate_interrupt(userio_channel, start_time, offset,
                                     event, error))
                 return FALSE;
         } else {
