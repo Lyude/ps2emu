@@ -77,7 +77,7 @@ static gboolean simulate_interrupt(GIOChannel *userio_channel,
         g_usleep(event->time - current_time);
 
     if (verbose)
-        printf("Send\t-> %hhx\n", event->data);
+        printf("Send\t-> %.2hhx\n", event->data);
 
     rc = send_userio_cmd(userio_channel, USERIO_CMD_SEND_INTERRUPT,
                          event->data, error);
@@ -102,9 +102,9 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
         return FALSE;
 
     if (verbose && event->data == data)
-        printf("Receive\t<- %hhx\n", data);
+        printf("Receive\t<- %.2hhx\n", data);
     else if (event->data != data)
-        printf("Expected %hhx, received %hhx\n", event->data, data);
+        printf("Expected %.2hhx, received %2hhx\n", event->data, data);
 
     return TRUE;
 }
