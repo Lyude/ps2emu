@@ -34,11 +34,11 @@ Print the version of ps2emu-record, and quit.
 .BR \-v\fR,\ \fB\-\-verbose
 Turns on printing of events being sent and received over /dev/userio.
 .TP
-.BR \-\-no\-events
+.BR \-n\fR,\ \fB\-\-no\-events
 Don't replay any of the actual input events from the device, just create the
 device with the initialization sequence in the log.
 .TP
-.BR \-\-keep\-running
+.BR \-r\fR,\ \fB\-\-keep\-running
 Don't exit immediately after playing the recording, keep running until we
 receive a keyboard interrupt, or anything else that would kill the process.
 .TP
