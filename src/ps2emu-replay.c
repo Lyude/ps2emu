@@ -27,7 +27,7 @@
 #include <linux/serio.h>
 #include <userio.h>
 
-#define PS2EMU_MIN_EVENT_DELAY 5 /* in seconds */
+#define PS2EMU_MIN_EVENT_DELAY (0.5 * G_USEC_PER_SEC)
 
 typedef struct {
     LineType type;
@@ -351,7 +351,7 @@ gint main(gint argc,
                              "information");
 
     max_wait *= G_USEC_PER_SEC;
-    event_delay = (event_delay + PS2EMU_MIN_EVENT_DELAY) * G_USEC_PER_SEC;
+    event_delay = event_delay * G_USEC_PER_SEC + PS2EMU_MIN_EVENT_DELAY;
     note_delay *= G_USEC_PER_SEC;
 
     input_channel = g_io_channel_new_file(argv[1], "r", &error);
