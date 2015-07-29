@@ -44,10 +44,6 @@ static GList *main_event_list;
 
 static PS2Port replay_device_type = PS2_PORT_AUX;
 
-static LogLine * log_line_new() {
-    return g_slice_alloc(sizeof(LogLine));
-}
-
 static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
                                  guint8 data,
@@ -208,7 +204,7 @@ static gboolean parse_events(GIOChannel *input_channel,
                         return FALSE;
                 }
 
-                log_line = log_line_new();
+                log_line = g_slice_alloc(sizeof(LogLine));
                 *log_line = (LogLine) {
                     .type = line_type,
                     .ps2_event = event,
@@ -240,7 +236,7 @@ static gboolean parse_events(GIOChannel *input_channel,
                     return FALSE;
                 }
 
-                log_line = log_line_new();
+                log_line = g_slice_alloc(sizeof(LogLine));
                 *log_line = (LogLine) {
                     .type = line_type,
                     .note = g_strdup(msg_start),
