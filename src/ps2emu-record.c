@@ -375,6 +375,7 @@ static void exit_on_interrupt() {
 
 static gboolean enable_i8042_debugging(GError **error) {
     GDir *devices_dir = NULL;
+    GSList *connected_ports = NULL;
     struct sigaction sigaction_struct;
 
     devices_dir = g_dir_open(I8042_DEV_DIR, 0, error);
@@ -390,9 +391,21 @@ static gboolean enable_i8042_debugging(GError **error) {
          dir_name != NULL && *error == NULL;
          dir_name = g_dir_read_name(devices_dir)) {
         gchar *file_name;
+        gchar *input_dev_path;
 
         if (!g_str_has_prefix(dir_name, "serio"))
             continue;
+
+        /* Check if the port's connected */
+        input_dev_path = g_build_filename(I8042_DEV_DIR, dir_name, "input",
+                                          NULL);
+        if (!g_file_test(input_dev_path, G_FILE_TEST_EXISTS)) {
+            g_free(input_dev_path);
+            continue;
+        }
+
+        g_free(input_dev_path);
+        connected_ports = g_slist_prepend(connected_ports, strdup(dir_name));
 
         file_name = g_build_filename(I8042_DEV_DIR, dir_name, "drvctl", NULL);
         if (!write_to_char_dev(file_name, error, "none")) {
@@ -423,8 +436,17 @@ static gboolean enable_i8042_debugging(GError **error) {
          dir_name != NULL && *error == NULL;
          dir_name = g_dir_read_name(devices_dir)) {
         gchar *file_name;
+        gboolean was_connected = FALSE;
 
-        if (!g_str_has_prefix(dir_name, "serio"))
+        /* Check if the directory was a previously connected port */
+        for (GSList *l = connected_ports; l != NULL; l = l->next) {
+            if (strcmp(l->data, dir_name) != 0)
+                continue;
+
+            was_connected = TRUE;
+            break;
+        }
+        if (!was_connected)
             continue;
 
         file_name = g_build_filename(I8042_DEV_DIR, dir_name, "drvctl", NULL);
@@ -439,6 +461,7 @@ static gboolean enable_i8042_debugging(GError **error) {
         goto error;
 
     g_dir_close(devices_dir);
+    g_slist_free_full(connected_ports, g_free);
 
     /* Disable debugging when this application quits */
     memset(&sigaction_struct, 0, sizeof(sigaction_struct));
@@ -453,6 +476,9 @@ static gboolean enable_i8042_debugging(GError **error) {
 error:
     if (devices_dir)
         g_dir_close(devices_dir);
+
+    if (connected_ports)
+        g_slist_free_full(connected_ports, g_free);
 
     return FALSE;
 }
