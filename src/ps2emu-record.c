@@ -394,7 +394,7 @@ static gboolean enable_i8042_debugging(GError **error) {
         if (!g_str_has_prefix(dir_name, "serio"))
             continue;
 
-        file_name = g_strconcat(I8042_DEV_DIR, dir_name, "/", "drvctl", NULL);
+        file_name = g_build_filename(I8042_DEV_DIR, dir_name, "drvctl", NULL);
         if (!write_to_char_dev(file_name, error, "none")) {
             g_free(file_name);
             goto error;
@@ -427,7 +427,7 @@ static gboolean enable_i8042_debugging(GError **error) {
         if (!g_str_has_prefix(dir_name, "serio"))
             continue;
 
-        file_name = g_strconcat(I8042_DEV_DIR, dir_name, "/", "drvctl", NULL);
+        file_name = g_build_filename(I8042_DEV_DIR, dir_name, "drvctl", NULL);
         if (!write_to_char_dev(file_name, error, "rescan")) {
             g_free(file_name);
             goto error;
