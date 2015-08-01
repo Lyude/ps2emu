@@ -87,6 +87,7 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
                                  GError **error) {
     guchar data;
     gsize count;
+    static gboolean sync_warning_printed = FALSE;
     GIOStatus rc;
 
     rc = g_io_channel_read_chars(userio_channel, (gchar*)&data,
@@ -97,8 +98,16 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
 
     if (verbose && event->data == data)
         printf("Receive\t<- %.2hhx\n", data);
-    else if (event->data != data)
+    else if (event->data != data) {
         printf("Expected %.2hhx, received %.2hhx\n", event->data, data);
+
+        if (!sync_warning_printed) {
+            fprintf(stderr,
+                    "The device has gone out of sync with the recording, "
+                    "playback from this point forward will probably fail.\n");
+            sync_warning_printed = TRUE;
+        }
+    }
 
     return TRUE;
 }
