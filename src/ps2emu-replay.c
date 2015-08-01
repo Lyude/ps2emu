@@ -37,8 +37,6 @@ typedef struct {
     };
 } LogLine;
 
-static GList *event_list;
-
 static GList *init_event_list;
 static GList *main_event_list;
 
@@ -174,7 +172,7 @@ static gboolean parse_events(GIOChannel *input_channel,
         if (log_version < 1) {
             line_type = LINE_TYPE_EVENT;
             msg_start = line;
-            event_list_dest = &event_list;
+            event_list_dest = &main_event_list;
         } else
             line_type = get_line_type(line, &msg_start, error);
 
@@ -254,10 +252,10 @@ static gboolean parse_events(GIOChannel *input_channel,
     if (log_version >= 1) {
         if (init_event_list)
             init_event_list = g_list_reverse(init_event_list);
-        if (main_event_list)
-            main_event_list = g_list_reverse(main_event_list);
-    } else
-        event_list = g_list_reverse(event_list);
+    }
+
+    if (main_event_list)
+        main_event_list = g_list_reverse(main_event_list);
 
     return TRUE;
 }
@@ -400,7 +398,7 @@ gint main(gint argc,
     if (log_version == 0) {
         replay_device_type = PS2_PORT_AUX;
 
-        if (!replay_line_list(userio_channel, event_list, 0, 0, verbose,
+        if (!replay_line_list(userio_channel, main_event_list, 0, 0, verbose,
                               &error))
             goto error;
     } else {
