@@ -98,7 +98,7 @@ static gboolean simulate_receive(GIOChannel *userio_channel,
     if (verbose && event->data == data)
         printf("Receive\t<- %.2hhx\n", data);
     else if (event->data != data)
-        printf("Expected %.2hhx, received %2hhx\n", event->data, data);
+        printf("Expected %.2hhx, received %.2hhx\n", event->data, data);
 
     return TRUE;
 }
