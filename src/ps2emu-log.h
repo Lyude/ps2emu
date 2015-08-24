@@ -92,6 +92,7 @@ LogSectionType log_get_section_type_from_line(const gchar *line,
 
 ParsedLog *log_parse(GIOChannel *input_channel,
                      int log_version,
-                     GError **error);
+                     GError **error)
+G_GNUC_MALLOC;
 
 #endif /* !__PS2EMU_LOG_H__ */
