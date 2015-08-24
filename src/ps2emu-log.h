@@ -76,6 +76,9 @@ LogLineType log_get_line_type(gchar *line,
                               gchar **message_start,
                               GError **error);
 
+gint log_parse_version(GIOChannel *input_channel,
+                       GError **error);
+
 void ps2_event_free(PS2Event *event);
 
 gchar * ps2_event_to_string(PS2Event *event,

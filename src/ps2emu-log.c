@@ -281,8 +281,8 @@ error:
     return NULL;
 }
 
-int log_parse_version(GIOChannel *input_channel,
-                      GError **error) {
+gint log_parse_version(GIOChannel *input_channel,
+                       GError **error) {
     gchar *line = NULL;
     int log_version,
         parse_count;
