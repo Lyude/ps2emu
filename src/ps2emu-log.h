@@ -55,15 +55,15 @@ typedef struct {
     LogLineType type;
     union {
         PS2Event *ps2_event;
-        gchar *note;
+        gchar    *note;
     };
 } LogLine;
 
 typedef struct {
-    GList *init_section;
-    GList *main_section;
+    GList   *init_section;
+    GList   *main_section;
 
-    PS2Port port;
+    PS2Port  port;
 } ParsedLog;
 
 typedef enum {
@@ -89,9 +89,6 @@ G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
 LogSectionType log_get_section_type_from_line(const gchar *line,
                                               GError **error);
-
-int log_parse_version(GIOChannel *input_channel,
-                      GError **error);
 
 ParsedLog *log_parse(GIOChannel *input_channel,
                      int log_version,
