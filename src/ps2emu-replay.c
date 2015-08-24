@@ -13,10 +13,8 @@
  * details.
  */
 
-#include "ps2emu-event.h"
+#include "ps2emu-log.h"
 #include "ps2emu-misc.h"
-#include "ps2emu-line.h"
-#include "ps2emu-section.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,19 +26,6 @@
 #include <userio.h>
 
 #define PS2EMU_MIN_EVENT_DELAY (0.5 * G_USEC_PER_SEC)
-
-typedef struct {
-    LineType type;
-    union {
-        PS2Event *ps2_event;
-        gchar *note;
-    };
-} LogLine;
-
-static GList *init_event_list;
-static GList *main_event_list;
-
-static PS2Port replay_device_type = PS2_PORT_AUX;
 
 static GIOStatus send_userio_cmd(GIOChannel *userio_channel,
                                  guint8 type,
@@ -160,149 +145,6 @@ static gboolean replay_line_list(GIOChannel *userio_channel,
     return TRUE;
 }
 
-static gboolean parse_events(GIOChannel *input_channel,
-                             int log_version,
-                             GError **error) {
-    gchar *line;
-    LineType line_type;
-    LogLine *log_line;
-    PS2Event *event;
-    LogSectionType section_type;
-    gchar *msg_start;
-    GList **event_list_dest;
-    GIOStatus rc;
-
-    while ((rc = g_io_channel_read_line(input_channel, &line, NULL, NULL,
-                                        error)) == G_IO_STATUS_NORMAL) {
-        g_strchug(line);
-
-        if (line[0] == '#' || line[0] == '\n')
-            continue;
-
-        if (log_version < 1) {
-            line_type = LINE_TYPE_EVENT;
-            msg_start = line;
-            event_list_dest = &main_event_list;
-        } else
-            line_type = get_line_type(line, &msg_start, error);
-
-        switch (line_type) {
-            case LINE_TYPE_DEVICE_TYPE:
-                switch (msg_start[0]) {
-                    case 'K':
-                        replay_device_type = PS2_PORT_KBD;
-                        break;
-                    case 'A':
-                        replay_device_type = PS2_PORT_AUX;
-                        break;
-                    default:
-                        g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                                    "Invalid device type '%c'\n", msg_start[0]);
-                        return FALSE;
-                }
-
-                break;
-            case LINE_TYPE_EVENT:
-                event = ps2_event_from_line(msg_start, log_version, error);
-
-                if (!event) {
-                    if (!*error)
-                        continue;
-                    else
-                        return FALSE;
-                }
-
-                log_line = g_slice_alloc(sizeof(LogLine));
-                *log_line = (LogLine) {
-                    .type = line_type,
-                    .ps2_event = event,
-                };
-
-                *event_list_dest = g_list_prepend(*event_list_dest, log_line);
-                break;
-            case LINE_TYPE_SECTION:
-                section_type = section_type_from_line(msg_start, error);
-
-                switch (section_type) {
-                    case SECTION_TYPE_INIT:
-                        event_list_dest = &init_event_list;
-                        break;
-                    case SECTION_TYPE_MAIN:
-                        event_list_dest = &main_event_list;
-                        break;
-                    case SECTION_TYPE_ERROR:
-                        return FALSE;
-                }
-                break;
-            case LINE_TYPE_NOTE:
-                /* Remove the newline character from the end of the note */
-                g_strchomp(msg_start);
-
-                if (strlen(msg_start) == 0) {
-                    g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                                        "Note is empty");
-                    return FALSE;
-                }
-
-                log_line = g_slice_alloc(sizeof(LogLine));
-                *log_line = (LogLine) {
-                    .type = line_type,
-                    .note = g_strdup(msg_start),
-                };
-
-                *event_list_dest = g_list_prepend(*event_list_dest, log_line);
-                break;
-            case LINE_TYPE_INVALID:
-                return FALSE;
-        }
-    }
-    if (rc != G_IO_STATUS_EOF)
-        return FALSE;
-
-    if (log_version >= 1) {
-        if (init_event_list)
-            init_event_list = g_list_reverse(init_event_list);
-    }
-
-    if (main_event_list)
-        main_event_list = g_list_reverse(main_event_list);
-
-    return TRUE;
-}
-
-static int parse_log_version(GIOChannel *input_channel,
-                             GError **error) {
-    gchar *line = NULL;
-    int log_version,
-        parse_count;
-    GIOStatus rc;
-
-    rc = g_io_channel_read_line(input_channel, &line, NULL, NULL, error);
-    if (rc != G_IO_STATUS_NORMAL) {
-        if (rc == G_IO_STATUS_EOF) {
-            g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_NO_EVENTS,
-                                "Reached unexpected EOF");
-        }
-
-        goto error;
-    }
-
-    errno = 0;
-    parse_count = sscanf(line, "# ps2emu-record V%d\n", &log_version);
-    if (parse_count == 0 || errno != 0) {
-        g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                            "Invalid log file version");
-        goto error;
-    }
-
-    g_free(line);
-    return log_version;
-
-error:
-    g_free(line);
-    return -1;
-}
-
 gint main(gint argc,
           gchar *argv[]) {
     GOptionContext *main_context =
@@ -318,6 +160,7 @@ gint main(gint argc,
     gboolean no_events = FALSE,
              keep_running = FALSE,
              verbose = FALSE;
+    ParsedLog *log;
     __u8 port_type;
 
     GOptionEntry options[] = {
@@ -364,7 +207,7 @@ gint main(gint argc,
         goto error;
     }
 
-    log_version = parse_log_version(input_channel, &error);
+    log_version = log_parse_version(input_channel, &error);
     if (log_version > PS2EMU_LOG_VERSION) {
         g_set_error(&error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                     "Log version is too new (found %d, we only support up to "
@@ -372,7 +215,8 @@ gint main(gint argc,
         goto error;
     }
 
-    if (!parse_events(input_channel, log_version, &error))
+    log = log_parse(input_channel, log_version, &error);
+    if (!log)
         goto error;
 
     g_io_channel_unref(input_channel);
@@ -390,8 +234,7 @@ gint main(gint argc,
     }
     g_io_channel_set_buffered(userio_channel, FALSE);
 
-    port_type = (replay_device_type == PS2_PORT_KBD) ?
-        SERIO_8042_XL : SERIO_8042;
+    port_type = (log->port == PS2_PORT_KBD) ? SERIO_8042_XL : SERIO_8042;
     rc = send_userio_cmd(userio_channel, USERIO_CMD_SET_PORT_TYPE, port_type,
                          &error);
     if (rc != G_IO_STATUS_NORMAL) {
@@ -406,14 +249,12 @@ gint main(gint argc,
     }
 
     if (log_version == 0) {
-        replay_device_type = PS2_PORT_AUX;
-
-        if (!replay_line_list(userio_channel, main_event_list, 0, 0, verbose,
+        if (!replay_line_list(userio_channel, log->main_section, 0, 0, verbose,
                               &error))
             goto error;
     } else {
         printf("Replaying initialization sequence...\n");
-        if (!replay_line_list(userio_channel, init_event_list, 0, 0, verbose,
+        if (!replay_line_list(userio_channel, log->init_section, 0, 0, verbose,
                               &error))
             goto error;
 
@@ -424,7 +265,7 @@ gint main(gint argc,
             g_usleep(event_delay);
 
             printf("Replaying event sequence...\n");
-            if (!replay_line_list(userio_channel, main_event_list, max_wait,
+            if (!replay_line_list(userio_channel, log->main_section, max_wait,
                                   note_delay, verbose, &error))
                 goto error;
         }

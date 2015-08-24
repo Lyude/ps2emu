@@ -13,8 +13,8 @@
  * details.
  */
 
-#ifndef __PS2EMU_EVENT_H__
-#define __PS2EMU_EVENT_H__
+#ifndef __PS2EMU_LOG_H__
+#define __PS2EMU_LOG_H__
 
 #include <glib.h>
 
@@ -43,6 +43,39 @@ typedef struct {
     const gchar  *original_line;
 } PS2Event;
 
+typedef enum {
+    LINE_TYPE_EVENT       = 'E',
+    LINE_TYPE_SECTION     = 'S',
+    LINE_TYPE_DEVICE_TYPE = 'T',
+    LINE_TYPE_NOTE        = 'N',
+    LINE_TYPE_INVALID     = -1
+} LogLineType;
+
+typedef struct {
+    LogLineType type;
+    union {
+        PS2Event *ps2_event;
+        gchar *note;
+    };
+} LogLine;
+
+typedef struct {
+    GList *init_section;
+    GList *main_section;
+
+    PS2Port port;
+} ParsedLog;
+
+typedef enum {
+    SECTION_TYPE_INIT,
+    SECTION_TYPE_MAIN,
+    SECTION_TYPE_ERROR = -1,
+} LogSectionType;
+
+LogLineType log_get_line_type(gchar *line,
+                              gchar **message_start,
+                              GError **error);
+
 void ps2_event_free(PS2Event *event);
 
 gchar * ps2_event_to_string(PS2Event *event,
@@ -54,4 +87,14 @@ PS2Event * ps2_event_from_line(const gchar *str,
                                GError **error)
 G_GNUC_WARN_UNUSED_RESULT G_GNUC_MALLOC;
 
-#endif /* !__PS2EMU_EVENT_H__ */
+LogSectionType log_get_section_type_from_line(const gchar *line,
+                                              GError **error);
+
+int log_parse_version(GIOChannel *input_channel,
+                      GError **error);
+
+ParsedLog *log_parse(GIOChannel *input_channel,
+                     int log_version,
+                     GError **error);
+
+#endif /* !__PS2EMU_LOG_H__ */

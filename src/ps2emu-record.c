@@ -23,9 +23,8 @@
 #include <signal.h>
 #include <linux/limits.h>
 
-#include "ps2emu-section.h"
+#include "ps2emu-log.h"
 #include "ps2emu-misc.h"
-#include "ps2emu-event.h"
 
 typedef struct {
     GQuark type;
