@@ -200,7 +200,7 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                     default:
                         g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                                     "Invalid device type '%c'\n", msg_start[0]);
-                        return NULL;
+                        goto error;
                 }
 
                 break;
@@ -211,7 +211,7 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                     if (!*error)
                         continue;
                     else
-                        return NULL;
+                        goto error;
                 }
 
                 log_line = g_slice_alloc(sizeof(LogLine));
@@ -233,7 +233,7 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                         section_dest = &parsed_log->main_section;
                         break;
                     case SECTION_TYPE_ERROR:
-                        return NULL;
+                        goto error;
                 }
                 break;
             case LINE_TYPE_NOTE:
@@ -243,7 +243,7 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                 if (strlen(msg_start) == 0) {
                     g_set_error_literal(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
                                         "Note is empty");
-                    return NULL;
+                    goto error;
                 }
 
                 log_line = g_slice_alloc(sizeof(LogLine));
@@ -255,11 +255,11 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                 *section_dest = g_list_prepend(*section_dest, log_line);
                 break;
             case LINE_TYPE_INVALID:
-                return NULL;
+                goto error;
         }
     }
     if (rc != G_IO_STATUS_EOF)
-        return NULL;
+        goto error;
 
     if (log_version >= 1) {
         if (parsed_log->init_section)
@@ -270,6 +270,15 @@ ParsedLog *log_parse(GIOChannel *input_channel,
         parsed_log->main_section = g_list_reverse(parsed_log->main_section);
 
     return parsed_log;
+
+error:
+    if (parsed_log->init_section)
+        g_list_free_full(parsed_log->init_section, g_free);
+    if (parsed_log->main_section)
+        g_list_free_full(parsed_log->main_section, g_free);
+
+    g_free(parsed_log);
+    return NULL;
 }
 
 int log_parse_version(GIOChannel *input_channel,
