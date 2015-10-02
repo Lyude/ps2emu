@@ -364,6 +364,14 @@ next:
 static inline void disable_i8042_debugging() {
     g_warn_if_fail(write_to_char_dev("/sys/module/i8042/parameters/debug",
                                      NULL, "0\n"));
+
+    if (recording_target == PS2_PORT_KBD &&
+        g_file_test("/sys/module/i8042/parameters/unmask_kbd_data",
+                    G_FILE_TEST_EXISTS)) {
+        g_warn_if_fail(write_to_char_dev(
+                "/sys/module/i8042/parameters/unmask_kbd_data",
+                NULL, "0\n"));
+    }
 }
 
 static void exit_on_interrupt() {
@@ -428,6 +436,15 @@ static gboolean enable_i8042_debugging(GError **error) {
     /* Enable the debugging output for i8042 */
     if (!write_to_char_dev("/sys/module/i8042/parameters/debug", error, "1\n"))
         goto error;
+
+    /* As of Linux 4.3+, data coming out of the KBD port is masked by default */
+    if (recording_target == PS2_PORT_KBD &&
+        g_file_test("/sys/module/i8042/parameters/unmask_kbd_data",
+                    G_FILE_TEST_EXISTS)) {
+        if (!write_to_char_dev("/sys/module/i8042/parameters/unmask_kbd_data",
+                               error, "1\n"))
+            goto error;
+    }
 
     /* Reattach the devices */
     g_dir_rewind(devices_dir);
