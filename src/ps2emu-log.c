@@ -27,6 +27,21 @@ void ps2_event_free(PS2Event *event) {
     g_slice_free(PS2Event, event);
 }
 
+static void log_line_free(LogLine *log_line) {
+    switch (log_line->type) {
+        case LINE_TYPE_NOTE:
+            g_free(log_line->note);
+            break;
+        case LINE_TYPE_EVENT:
+            ps2_event_free(log_line->ps2_event);
+            break;
+        default:
+            break;
+    }
+
+    g_slice_free(LogLine, log_line);
+}
+
 gchar * ps2_event_to_string(PS2Event *event,
                             time_t time) {
     gchar *event_str,
@@ -273,9 +288,9 @@ ParsedLog *log_parse(GIOChannel *input_channel,
 
 error:
     if (parsed_log->init_section)
-        g_list_free_full(parsed_log->init_section, g_free);
+        g_list_free_full(parsed_log->init_section, (GDestroyNotify)log_line_free);
     if (parsed_log->main_section)
-        g_list_free_full(parsed_log->main_section, g_free);
+        g_list_free_full(parsed_log->main_section, (GDestroyNotify)log_line_free);
 
     g_free(parsed_log);
     return NULL;
