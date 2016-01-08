@@ -196,7 +196,7 @@ ParsedLog *log_parse(GIOChannel *input_channel,
                                         error)) == G_IO_STATUS_NORMAL) {
         g_strchug(line);
 
-        if (line[0] == '#' || line[0] == '\n')
+        if (line[0] == '#' || line[0] == '\0')
             continue;
 
         if (log_version < 1) {
