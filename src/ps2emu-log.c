@@ -148,7 +148,7 @@ LogLineType log_get_line_type(gchar *line,
     parse_count = sscanf(line, "%1c:", &type_char);
     if (errno || parse_count != 1) {
         g_set_error(error, PS2EMU_ERROR, PS2EMU_ERROR_INPUT,
-                    "Invalid line `%s`", line);
+                    "Invalid event line `%s`", line);
         return -1;
     }
 
