@@ -518,8 +518,8 @@ gboolean init_timeout_checker(void *data) {
     printf("S: Main\n");
 
     fprintf(stderr,
-            "The first stage of the recording has completed, you may now use "
-            "your computer normally.\n");
+            "# The first stage of the recording has completed, you may now use "
+            "# your computer normally.\n");
 
     return G_SOURCE_REMOVE;
 }
