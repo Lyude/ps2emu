@@ -1,5 +1,5 @@
 AM_CFLAGS = -std=gnu11 $(GLIB_CFLAGS) -Wall -I$(top_srcdir)/ps2emu-kmod
-AM_LDFLAGS = $(GLIB_LIBS) $(GLIB_LDFLAGS)
+LIBS = $(GLIB_LIBS) $(GLIB_LDFLAGS)
 
 sbin_PROGRAMS = ps2emu-record \
                 ps2emu-replay
